@@ -4,3 +4,9 @@ norg AST parser that uses tree-sitter-norg internally
 
 #warn
 > This version of parser uses unofficial norg spec
+
+note about macro system:
+
+- every macros will be expanded to `Vec<Self>`.
+- expanded macro contents can include another macro. there will be recursion limit for this
+- as there are two types of macros (block/inline), there are also two result types

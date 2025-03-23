@@ -27,6 +27,42 @@ enum NorgInline {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct NorgBlockMeta;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct NorgBlockNode {
+    meta: NorgBlockMeta,
+    data: NorgBlock,
+}
+
+// in janet struct:
+// {
+//   :kind "paragraph"
+//   :inline false
+//   :meta {}
+//   :data {
+//     content: []
+//   }
+// }
+// {
+//   :kind "embed"
+//   :inline false
+//   :meta {}
+//   :data {
+//     :language "html"
+//     :content "<img src="/path/to/image.png">"
+//   }
+// }
+// {
+//   :kind "strong"
+//   :inline true
+//   :meta {}
+//   :data {
+//     :content [...]
+//   }
+// }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum NorgBlock {
     Section {
         level: u16,
@@ -37,6 +73,11 @@ enum NorgBlock {
     Infirm {
         name: String,
         // TODO: change this to Vec<String>
+        params: Option<String>,
+    },
+    // TODO: how to parse this...
+    CarryoverTag {
+        name: String,
         params: Option<String>,
     },
     RangedTag {
@@ -65,82 +106,94 @@ fn main() {
     dbg!(ast);
 }
 
-fn node_to_nodes(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
-    let mut cursor = node.walk();
-    node.named_children(&mut cursor)
-        .map(|n| node_to_node(n, text))
-        .flatten()
+fn expand_ast(tree: Vec<NorgBlockNode>) -> Vec<NorgBlockNode> {
+    tree.into_iter()
+        .map(|node| {
+            node
+        })
         .collect()
 }
 
-fn node_to_node(node: tree_sitter::Node, text: &[u8]) -> Option<NorgBlock> {
-    match node.kind() {
-        "section" => {
-            let heading_node = node.child_by_field_name("heading").unwrap();
-            let prefix_node = heading_node.child(0).unwrap();
-            let prefix_count = prefix_node
-                .utf8_text(text)
-                .unwrap()
-                .len();
-            let title_node = heading_node.child(1);
-            let title = title_node.map(|node| node_to_inlines(node, text));
-            Some(NorgBlock::Section {
-                level: prefix_count as u16,
-                heading: title,
-                contents: node_to_nodes(node, text),
-            })
-        }
-        "paragraph" => {
-            let mut cursor = node.walk();
-            let inlines = node
-                .named_children(&mut cursor)
-                .map(|node| node_to_inline(node, text))
-                .flatten()
-                .collect();
-            Some(NorgBlock::Paragraph(inlines))
-        }
-        "infirm_tag" => {
-            let name = node
-                .child_by_field_name("name")
-                .unwrap()
-                .utf8_text(text)
-                .unwrap()
-                .to_string();
-            let raw_param = node
-                .child_by_field_name("param")
-                .map(|node| {
-                    node.utf8_text(text).unwrap().to_string()
-                });
-            Some(NorgBlock::Infirm {
-                name,
-                params: raw_param,
-            })
-        }
-        "ranged_tag" => {
-            let name = node
-                .child_by_field_name("name")
-                .unwrap()
-                .utf8_text(text)
-                .unwrap()
-                .to_string();
-            let raw_param = node
-                .child_by_field_name("param")
-                .map(|node| {
-                    node.utf8_text(text).unwrap().to_string()
-                });
-            let mut cursor = node.walk();
-            let lines = node
-                .children_by_field_name("line", &mut cursor)
-                .map(|node| node.utf8_text(text).unwrap().to_string())
-                .collect();
-            Some(NorgBlock::RangedTag {
-                name,
-                params: raw_param,
-                content: lines,
-            })
-        }
-        _ => None,
-    }
+fn node_to_nodes(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
+    let mut cursor = node.walk();
+    node.named_children(&mut cursor)
+        .map(|n| match n.kind() {
+            "section" => {
+                let heading_node = node.child_by_field_name("heading").unwrap();
+                let prefix_node = heading_node.child(0).unwrap();
+                let prefix_count = prefix_node.utf8_text(text).unwrap().len();
+                let title_node = heading_node.child(1);
+                let title = title_node.map(|node| node_to_inlines(node, text));
+                Some(NorgBlock::Section {
+                    level: prefix_count as u16,
+                    heading: title,
+                    contents: node_to_nodes(node, text),
+                })
+            }
+            "paragraph" => {
+                let mut cursor = node.walk();
+                let inlines = node
+                    .named_children(&mut cursor)
+                    .map(|node| node_to_inline(node, text))
+                    .flatten()
+                    .collect();
+                Some(NorgBlock::Paragraph(inlines))
+            }
+            "infirm_tag" => {
+                let name = node
+                    .child_by_field_name("name")
+                    .unwrap()
+                    .utf8_text(text)
+                    .unwrap()
+                    .to_string();
+                let raw_param = node
+                    .child_by_field_name("param")
+                    .map(|node| node.utf8_text(text).unwrap().to_string());
+                Some(NorgBlock::Infirm {
+                    name,
+                    params: raw_param,
+                })
+            }
+            "ranged_tag" => {
+                let name = node
+                    .child_by_field_name("name")
+                    .unwrap()
+                    .utf8_text(text)
+                    .unwrap()
+                    .to_string();
+                let raw_param = node
+                    .child_by_field_name("param")
+                    .map(|node| node.utf8_text(text).unwrap().to_string());
+                let mut cursor = node.walk();
+                let lines = node
+                    .children_by_field_name("line", &mut cursor)
+                    .map(|node| node.utf8_text(text).unwrap().to_string())
+                    .collect();
+                Some(NorgBlock::RangedTag {
+                    name,
+                    params: raw_param,
+                    content: lines,
+                })
+            }
+            "carryover_tag" => {
+                let name = node
+                    .child_by_field_name("name")
+                    .unwrap()
+                    .utf8_text(text)
+                    .unwrap()
+                    .to_string();
+                let raw_param = node
+                    .child_by_field_name("param")
+                    .map(|node| node.utf8_text(text).unwrap().to_string());
+                Some(NorgBlock::CarryoverTag {
+                    name,
+                    params: raw_param,
+                })
+            }
+            _ => None,
+        })
+        .flatten()
+        .collect()
 }
 
 fn node_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
