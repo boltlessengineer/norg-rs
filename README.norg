@@ -10,3 +10,15 @@ note about macro system:
 - every macros will be expanded to `Vec<Self>`.
 - expanded macro contents can include another macro. there will be recursion limit for this
 - as there are two types of macros (block/inline), there are also two result types
+
+** Exporting:
+
+~ parse whole document as AST
+~ for each tags, find `norg/tag/...{name}` and run it, each tags will be expanded to `Vec<Block>`
+~ walk through AST and run `neorg/export/block`. `neorg/export/block` will run `(:export block)` for `Block::Embed` types.
+
+@code
+String ------(rust)-> Vec<Block>
+Block::Tag -(janet)-> Vec<Block>
+Block -(rust/janet)-> String
+@end

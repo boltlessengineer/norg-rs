@@ -1,0 +1,7 @@
+paragraph
+
+.image path/to/image.png
+
+@code python
+print
+@end

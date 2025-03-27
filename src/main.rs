@@ -1,258 +1,152 @@
-use tree_sitter::Parser;
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum NorgInline {
-    Text(String),
-    Special(String),
-    Escape(char),
-    Whitespace,
-    SoftBreak,
-    Bold(Vec<Self>),
-    Italic(Vec<Self>),
-    Underline(Vec<Self>),
-    Strikethrough(Vec<Self>),
-    // TODO: verbatim should have different content type
-    Verbatim(Vec<Self>),
-    Macro {
-        name: String,
-    },
-    Link {
-        target: String,
-        markup: Option<Vec<Self>>,
-    },
-    Anchor {
-        target: Option<String>,
-        markup: Vec<Self>,
-    },
+use janetrs::{
+    Janet, JanetArgs, JanetKeyword, JanetTuple, TaggedJanet,
+    client::JanetClient, env::CFunOptions,
+};
+use norg_rs::{block::NorgBlock, inline::NorgInline};
+
+#[janetrs::janet_fn(arity(fix(1)))]
+fn export_block(args: &mut [Janet]) -> Janet {
+    use janetrs::JanetType::*;
+    let block: NorgBlock = args.get_matches(0, &[Struct]).try_into().unwrap();
+    let lang: JanetKeyword = args.get_matches(1, &[Keyword]).try_into().unwrap();
+    match block {
+        NorgBlock::Section {
+            params,
+            level,
+            heading,
+            contents,
+        } => todo!(),
+        NorgBlock::Paragraph { params, inlines } => {
+        },
+        NorgBlock::InfirmTag { params, name } => todo!(),
+        NorgBlock::CarryoverTag { params, name } => todo!(),
+        NorgBlock::RangedTag {
+            params,
+            name,
+            content,
+        } => todo!(),
+        NorgBlock::Embed { params, mut export } => {
+            let args = [
+                Janet::keyword(lang),
+                Janet::tuple(JanetTuple::builder(0).finalize()),
+            ];
+            return export.call(&args).unwrap();
+        }
+    }
+    Janet::nil()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct NorgBlockMeta;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct NorgBlockNode {
-    meta: NorgBlockMeta,
-    data: NorgBlock,
-}
-
-// in janet struct:
-// {
-//   :kind "paragraph"
-//   :inline false
-//   :meta {}
-//   :data {
-//     content: []
-//   }
-// }
-// {
-//   :kind "embed"
-//   :inline false
-//   :meta {}
-//   :data {
-//     :language "html"
-//     :content "<img src="/path/to/image.png">"
-//   }
-// }
-// {
-//   :kind "strong"
-//   :inline true
-//   :meta {}
-//   :data {
-//     :content [...]
-//   }
-// }
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum NorgBlock {
-    Section {
-        level: u16,
-        heading: Option<Vec<NorgInline>>,
-        contents: Vec<NorgBlock>,
-    },
-    Paragraph(Vec<NorgInline>),
-    Infirm {
-        name: String,
-        // TODO: change this to Vec<String>
-        params: Option<String>,
-    },
-    // TODO: how to parse this...
-    CarryoverTag {
-        name: String,
-        params: Option<String>,
-    },
-    RangedTag {
-        name: String,
-        params: Option<String>,
-        content: Vec<String>,
-    },
+#[janetrs::janet_fn(arity(fix(1)))]
+fn export_inlines(args: &mut [Janet]) -> Janet {
+    use janetrs::JanetType::*;
+    let inlines: JanetTuple = args.get_matches(0, &[Tuple]).try_into().unwrap();
+    dbg!(inlines);
+    Janet::nil()
 }
 
 fn main() {
-    let code = r#".image path/to/image.png
-@code language
-@end
-{:asdf:}
-"#;
-    let mut parser = Parser::new();
-    let language = tree_sitter_norg::LANGUAGE;
-    parser
-        .set_language(&language.into())
-        .expect("Error loading Norg parser");
-    let tree = parser.parse(code, None).unwrap();
-    let root = tree.root_node();
-    dbg!(root.to_sexp());
-    let text = code.as_bytes();
-    let ast = node_to_nodes(root, text);
-    dbg!(ast);
+    let text = std::fs::read("test.norg").unwrap();
+    let ast = norg_rs::parser::parse(&text);
+
+    let client = {
+        let mut client = JanetClient::init_with_default_env().unwrap();
+        client.add_c_fn(CFunOptions::new(c"neorg/export/block", export_block_c));
+        client.add_c_fn(CFunOptions::new(c"neorg/export/inlines", export_inlines_c));
+        client
+    };
+
+    // expand the tags
+    // TODO: do I really need this step? tags can be expanded on export step.
+    let ast = expand_ast(&client, ast);
+
+    // export document to other format
+    let target = "html";
+    let export = |ao: NorgBlock| {
+        export_block(&mut [ao.into(), Janet::keyword(target.into())])
+    };
+    let res = export(ast[2].clone());
+    dbg!(res);
 }
 
-fn expand_ast(tree: Vec<NorgBlockNode>) -> Vec<NorgBlockNode> {
+fn expand_ast(client: &JanetClient, tree: Vec<NorgBlock>) -> Vec<NorgBlock> {
     tree.into_iter()
         .map(|node| {
-            node
+            use norg_rs::block::NorgBlock::*;
+            match node {
+                Section {
+                    params,
+                    level,
+                    heading,
+                    contents,
+                } => Section {
+                    params,
+                    level,
+                    heading,
+                    contents: expand_ast(client, contents),
+                },
+                InfirmTag { name, params } => {
+                    let tag = client
+                        .run(format!(
+                            r#"
+                                (import ./stdlib :prefix "")
+                                norg/tag/{name}
+                            "#
+                        ))
+                        .unwrap();
+                    let TaggedJanet::Function(mut fun) = tag.unwrap() else {
+                        unimplemented!();
+                    };
+                    fun.call([
+                        Janet::nil(),
+                        match params.clone() {
+                            Some(params) => JanetTuple::builder(1)
+                                .put(Janet::string(params.into()))
+                                .finalize()
+                                .into(),
+                            None => Janet::nil(),
+                        },
+                    ])
+                    .unwrap()
+                    .try_into()
+                    .unwrap()
+                }
+                RangedTag {
+                    params,
+                    name,
+                    content,
+                } => {
+                    let tag = client
+                        .run(format!(
+                            r#"
+                        (import ./stdlib :prefix "")
+                        norg/tag/{name}
+                    "#
+                        ))
+                        .unwrap();
+                    let TaggedJanet::Function(mut fun) = tag.unwrap() else {
+                        unimplemented!();
+                    };
+                    fun.call([
+                        Janet::nil(),
+                        match params.clone() {
+                            Some(params) => JanetTuple::builder(1)
+                                .put(Janet::string(params.into()))
+                                .finalize()
+                                .into(),
+                            None => JanetTuple::builder(0).finalize().into(),
+                        },
+                        Janet::tuple(content.iter().map(|x| x.as_str()).collect()),
+                    ])
+                    .unwrap()
+                    .try_into()
+                    .unwrap()
+                }
+                n => n,
+            }
         })
         .collect()
-}
-
-fn node_to_nodes(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
-    let mut cursor = node.walk();
-    node.named_children(&mut cursor)
-        .map(|n| match n.kind() {
-            "section" => {
-                let heading_node = node.child_by_field_name("heading").unwrap();
-                let prefix_node = heading_node.child(0).unwrap();
-                let prefix_count = prefix_node.utf8_text(text).unwrap().len();
-                let title_node = heading_node.child(1);
-                let title = title_node.map(|node| node_to_inlines(node, text));
-                Some(NorgBlock::Section {
-                    level: prefix_count as u16,
-                    heading: title,
-                    contents: node_to_nodes(node, text),
-                })
-            }
-            "paragraph" => {
-                let mut cursor = node.walk();
-                let inlines = node
-                    .named_children(&mut cursor)
-                    .map(|node| node_to_inline(node, text))
-                    .flatten()
-                    .collect();
-                Some(NorgBlock::Paragraph(inlines))
-            }
-            "infirm_tag" => {
-                let name = node
-                    .child_by_field_name("name")
-                    .unwrap()
-                    .utf8_text(text)
-                    .unwrap()
-                    .to_string();
-                let raw_param = node
-                    .child_by_field_name("param")
-                    .map(|node| node.utf8_text(text).unwrap().to_string());
-                Some(NorgBlock::Infirm {
-                    name,
-                    params: raw_param,
-                })
-            }
-            "ranged_tag" => {
-                let name = node
-                    .child_by_field_name("name")
-                    .unwrap()
-                    .utf8_text(text)
-                    .unwrap()
-                    .to_string();
-                let raw_param = node
-                    .child_by_field_name("param")
-                    .map(|node| node.utf8_text(text).unwrap().to_string());
-                let mut cursor = node.walk();
-                let lines = node
-                    .children_by_field_name("line", &mut cursor)
-                    .map(|node| node.utf8_text(text).unwrap().to_string())
-                    .collect();
-                Some(NorgBlock::RangedTag {
-                    name,
-                    params: raw_param,
-                    content: lines,
-                })
-            }
-            "carryover_tag" => {
-                let name = node
-                    .child_by_field_name("name")
-                    .unwrap()
-                    .utf8_text(text)
-                    .unwrap()
-                    .to_string();
-                let raw_param = node
-                    .child_by_field_name("param")
-                    .map(|node| node.utf8_text(text).unwrap().to_string());
-                Some(NorgBlock::CarryoverTag {
-                    name,
-                    params: raw_param,
-                })
-            }
-            _ => None,
-        })
-        .flatten()
-        .collect()
-}
-
-fn node_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
-    let mut cursor = node.walk();
-    node.named_children(&mut cursor)
-        .map(|node| node_to_inline(node, text))
-        .flatten()
-        .collect()
-}
-
-fn node_to_inline(node: tree_sitter::Node, text: &[u8]) -> Option<NorgInline> {
-    match node.kind() {
-        "whitespace" => Some(NorgInline::Whitespace),
-        "soft_break" => Some(NorgInline::SoftBreak),
-        "word" => {
-            let text = node.utf8_text(text).unwrap().to_string();
-            Some(NorgInline::Text(text))
-        }
-        "punctuation" => {
-            let text = node.utf8_text(text).unwrap().to_string();
-            Some(NorgInline::Special(text))
-        }
-        "escape_sequence" => {
-            let character = node.utf8_text(text).unwrap().chars().nth(1).unwrap();
-            Some(NorgInline::Escape(character))
-        }
-        "bold" => Some(NorgInline::Bold(node_to_inlines(node, text))),
-        "italic" => Some(NorgInline::Italic(node_to_inlines(node, text))),
-        "underline" => Some(NorgInline::Underline(node_to_inlines(node, text))),
-        "strikethrough" => Some(NorgInline::Strikethrough(node_to_inlines(node, text))),
-        "verbatim" => Some(NorgInline::Verbatim(node_to_inlines(node, text))),
-        "inline_macro" => {
-            let name = node
-                .child_by_field_name("name")
-                .unwrap()
-                .utf8_text(text)
-                .unwrap()
-                .to_string();
-            Some(NorgInline::Macro { name })
-        }
-        "link" => {
-            let target = node
-                .child_by_field_name("target")
-                .unwrap()
-                .utf8_text(text)
-                .unwrap()
-                .to_string();
-            let markup = node
-                .child_by_field_name("description")
-                .map(|node| node_to_inlines(node, text));
-            Some(NorgInline::Link { target, markup })
-        }
-        "anchor" => {
-            let target = node
-                .child_by_field_name("target")
-                .map(|node| node.utf8_text(text).unwrap().to_string());
-            let markup = node_to_inlines(node.child_by_field_name("description").unwrap(), text);
-            Some(NorgInline::Anchor { target, markup })
-        }
-        _ => None,
-    }
 }
