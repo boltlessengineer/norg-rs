@@ -50,6 +50,8 @@ pub enum NorgBlock {
     },
     Embed {
         params: Option<String>,
+        // TODO: switch to HashMap<JanetKeyword, JanetFunction> instead
+        // to check if "embed" support specific target language
         export: JanetFunction<'static>,
     },
 }

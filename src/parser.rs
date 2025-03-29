@@ -1,4 +1,7 @@
-use crate::{block::{ListItem, NorgBlock}, inline::NorgInline};
+use crate::{
+    block::{ListItem, NorgBlock},
+    inline::NorgInline,
+};
 
 pub fn parse(text: &[u8]) -> Vec<NorgBlock> {
     let mut parser = tree_sitter::Parser::new();
@@ -33,7 +36,6 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                 inlines: tsnode_to_inlines(node, text),
             }),
             "infirm_tag" => {
-                dbg!(node.to_sexp());
                 let name = node
                     .child_by_field_name("name")
                     .unwrap()
@@ -93,11 +95,9 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                     items: {
                         let mut cursor = node.walk();
                         node.named_children(&mut cursor)
-                            .map(|node| {
-                                ListItem {
-                                    params: None,
-                                    contents: tsnode_to_blocks(node, text),
-                                }
+                            .map(|node| ListItem {
+                                params: None,
+                                contents: tsnode_to_blocks(node, text),
                             })
                             .collect()
                     },
@@ -112,11 +112,9 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                     items: {
                         let mut cursor = node.walk();
                         node.named_children(&mut cursor)
-                            .map(|node| {
-                                ListItem {
-                                    params: None,
-                                    contents: tsnode_to_blocks(node, text),
-                                }
+                            .map(|node| ListItem {
+                                params: None,
+                                contents: tsnode_to_blocks(node, text),
                             })
                             .collect()
                     },
@@ -131,11 +129,9 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                     items: {
                         let mut cursor = node.walk();
                         node.named_children(&mut cursor)
-                            .map(|node| {
-                                ListItem {
-                                    params: None,
-                                    contents: tsnode_to_blocks(node, text),
-                                }
+                            .map(|node| ListItem {
+                                params: None,
+                                contents: tsnode_to_blocks(node, text),
                             })
                             .collect()
                     },
@@ -172,13 +168,22 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
             "strikethrough" => Some(NorgInline::Strikethrough(tsnode_to_inlines(node, text))),
             "verbatim" => Some(NorgInline::Verbatim(tsnode_to_inlines(node, text))),
             "inline_macro" => {
+                dbg!(node.to_sexp());
                 let name = node
                     .child_by_field_name("name")
                     .unwrap()
                     .utf8_text(text)
                     .unwrap()
                     .to_string();
-                Some(NorgInline::Macro { name })
+                let attrs: Option<Vec<String>> =
+                    node.child_by_field_name("attributes").map(|attrs| {
+                        let mut cursor = attrs.walk();
+                        attrs
+                            .named_children(&mut cursor)
+                            .map(|attr| attr.utf8_text(text).unwrap().to_string())
+                            .collect()
+                    });
+                Some(NorgInline::Macro { name, attrs })
             }
             "link" => {
                 let target = node

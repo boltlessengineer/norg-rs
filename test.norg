@@ -1,5 +1,7 @@
 * heading text
 *this ~is~ a paragraph*
+\img(path/to/image.png)
+\gh(nvim-neorg/norg-specs)
 
 .image path/to/image.png
 
@@ -11,3 +13,9 @@ print
 > second list item
 -- asdf
 -- asdf
+
+~ this
+~ is
+~ a
+~ numbered
+~ list

@@ -17,6 +17,8 @@ pub enum NorgInline {
     // TODO: rename this to "tag"
     Macro {
         name: String,
+        // markup: Option<Vec<NorgInline>>,
+        attrs: Option<Vec<String>>,
         // TODO: add attributes and markup parameter
     },
     Link {
@@ -105,6 +107,23 @@ impl TryFrom<Janet> for NorgInline {
                         _ => None,
                     })
                     .ok_or(())?,
+                attrs: value
+                    .get(JanetKeyword::new(b"attrs"))
+                    .and_then(|attrs| match attrs.unwrap() {
+                        TaggedJanet::Tuple(attrs) => Some(Some(attrs)),
+                        TaggedJanet::Nil => Some(None),
+                        _ => None,
+                    })
+                    .ok_or(())?
+                    .map(|attrs| {
+                        attrs
+                            .iter()
+                            .map(|&attr| match attr.unwrap() {
+                                TaggedJanet::String(attr) => attr.to_string(),
+                                _ => todo!("error here"),
+                            })
+                            .collect()
+                    }),
             }),
             b"link" | b"anchor" => {
                 let target =
@@ -137,7 +156,7 @@ impl TryFrom<Janet> for NorgInline {
                     _ => unreachable!(),
                 }
             }
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -166,43 +185,77 @@ impl Into<Janet> for NorgInline {
                 .finalize(),
             Bold(markup) => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"bold"))
-                .put(JanetKeyword::new(b"markup"), Janet::tuple(markup.into_iter().collect()))
+                .put(
+                    JanetKeyword::new(b"markup"),
+                    Janet::tuple(markup.into_iter().collect()),
+                )
                 .finalize(),
             Italic(markup) => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"italic"))
-                .put(JanetKeyword::new(b"markup"), Janet::tuple(markup.into_iter().collect()))
+                .put(
+                    JanetKeyword::new(b"markup"),
+                    Janet::tuple(markup.into_iter().collect()),
+                )
                 .finalize(),
             Underline(markup) => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"underline"))
-                .put(JanetKeyword::new(b"markup"), Janet::tuple(markup.into_iter().collect()))
+                .put(
+                    JanetKeyword::new(b"markup"),
+                    Janet::tuple(markup.into_iter().collect()),
+                )
                 .finalize(),
             Strikethrough(markup) => JanetStruct::builder(2)
-                .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"strikethrough"))
-                .put(JanetKeyword::new(b"markup"), Janet::tuple(markup.into_iter().collect()))
+                .put(
+                    JanetKeyword::new(b"kind"),
+                    JanetKeyword::new(b"strikethrough"),
+                )
+                .put(
+                    JanetKeyword::new(b"markup"),
+                    Janet::tuple(markup.into_iter().collect()),
+                )
                 .finalize(),
             Verbatim(markup) => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"verbatim"))
-                .put(JanetKeyword::new(b"markup"), Janet::tuple(markup.into_iter().collect()))
+                .put(
+                    JanetKeyword::new(b"markup"),
+                    Janet::tuple(markup.into_iter().collect()),
+                )
                 .finalize(),
-            Macro { name } => JanetStruct::builder(2)
+            Macro { name, attrs } => JanetStruct::builder(3)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"macro"))
                 .put(JanetKeyword::new(b"name"), JanetString::new(&name))
+                .put(
+                    JanetKeyword::new(b"attrs"),
+                    match attrs {
+                        Some(attrs) => Janet::tuple(attrs.iter().map(|x| x.as_str()).collect()),
+                        None => Janet::nil(),
+                    },
+                )
                 .finalize(),
             Anchor { target, markup } => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"macro"))
-                .put(JanetKeyword::new(b"markup"), Janet::tuple(markup.into_iter().collect()))
-                .put(JanetKeyword::new(b"target"), match target {
-                    Some(target) => Janet::string(target.into()),
-                    None => Janet::nil(),
-                })
+                .put(
+                    JanetKeyword::new(b"markup"),
+                    Janet::tuple(markup.into_iter().collect()),
+                )
+                .put(
+                    JanetKeyword::new(b"target"),
+                    match target {
+                        Some(target) => Janet::string(target.into()),
+                        None => Janet::nil(),
+                    },
+                )
                 .finalize(),
             Link { target, markup } => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"macro"))
                 .put(JanetKeyword::new(b"target"), Janet::string(target.into()))
-                .put(JanetKeyword::new(b"markup"), match markup {
-                    Some(markup) => Janet::tuple(markup.into_iter().collect()),
-                    None => Janet::nil(),
-                })
+                .put(
+                    JanetKeyword::new(b"markup"),
+                    match markup {
+                        Some(markup) => Janet::tuple(markup.into_iter().collect()),
+                        None => Janet::nil(),
+                    },
+                )
                 .finalize(),
         };
         st.into()

@@ -19,3 +19,18 @@ note about macro system:
 @code
 Text -(rust)-> Vec<Block> -(janet)-> Other spec
 @end
+
+** Usage
+
+> Not possible right now. This is a plan.
+
+- embed `stdlib.janet` in your project
+- override some export logics in janet
+- run `(norg/export lang blocks ctx)`
+
+** TODOs
+
+- ( ) method to override the existing export logic
+- ( ) api to resolve links
+- ( ) embed `stdlib.janet` into rust
+- ( ) package as rust crate
