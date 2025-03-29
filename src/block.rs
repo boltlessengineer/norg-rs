@@ -11,15 +11,30 @@ pub enum NorgBlock {
         params: Option<String>,
         level: u16,
         heading: Option<Vec<NorgInline>>,
-        contents: Vec<NorgBlock>,
+        contents: Vec<Self>,
     },
     Paragraph {
         params: Option<String>,
         inlines: Vec<NorgInline>,
     },
-    // UnorderedList
+    UnorderedList {
+        params: Option<String>,
+        level: u16,
+        items: Vec<ListItem>,
+    },
+    OrderedList {
+        params: Option<String>,
+        level: u16,
+        items: Vec<ListItem>,
+    },
+    Quote {
+        params: Option<String>,
+        level: u16,
+        items: Vec<ListItem>,
+    },
     InfirmTag {
         // TODO: change this to Vec<String>
+        // TODO: also rename to attrs
         params: Option<String>,
         name: String,
     },
@@ -39,17 +54,27 @@ pub enum NorgBlock {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListItem {
+    pub params: Option<String>,
+    pub contents: Vec<NorgBlock>,
+}
+
 impl TryFrom<Janet> for NorgBlock {
+    // TODO: use actual error instead
     type Error = ();
 
     fn try_from(value: Janet) -> Result<Self, Self::Error> {
         let TaggedJanet::Struct(value) = value.unwrap() else {
             panic!("no struct");
         };
-        let kind = value.get(Janet::keyword("kind".into())).unwrap();
-        let TaggedJanet::Keyword(kind) = kind.unwrap() else {
-            panic!("no no kind");
-        };
+        let kind = value
+            .get(JanetKeyword::new(b"kind"))
+            .and_then(|&kind| match kind.unwrap() {
+                TaggedJanet::Keyword(kind) => Some(kind),
+                _ => None,
+            })
+            .ok_or(())?;
         let node = match kind.as_bytes() {
             b"embed" => {
                 let export = value.get_owned(Janet::keyword("export".into())).unwrap();
@@ -61,9 +86,55 @@ impl TryFrom<Janet> for NorgBlock {
                     export,
                 }
             }
+            b"section" => {
+                let level = value.get_owned(JanetKeyword::new(b"level")).unwrap();
+                let TaggedJanet::Number(level) = level.unwrap() else {
+                    unimplemented!();
+                };
+                let level = level as u16;
+                let heading: Option<Vec<NorgInline>> = value
+                    .get(JanetKeyword::new(b"heading"))
+                    .and_then(|inlines| match inlines.unwrap() {
+                        TaggedJanet::Array(inlines) => Some(
+                            inlines
+                                .iter()
+                                .map(|&inline| inline.try_into().unwrap())
+                                .collect(),
+                        ),
+                        _ => None,
+                    });
+                let contents: Vec<NorgBlock> = match value
+                    .get(JanetKeyword::new(b"contents"))
+                    .ok_or(())?
+                    .unwrap()
+                {
+                    TaggedJanet::Array(blocks) => blocks
+                        .iter()
+                        .map(|&block| block.try_into().unwrap())
+                        .collect(),
+                    _ => vec![],
+                };
+                NorgBlock::Section {
+                    params: None,
+                    level,
+                    heading,
+                    contents,
+                }
+            }
             b"paragraph" => NorgBlock::Paragraph {
                 params: None,
-                inlines: vec![],
+                inlines: value
+                    .get(JanetKeyword::new(b"inlines"))
+                    .and_then(|inlines| match inlines.unwrap() {
+                        TaggedJanet::Array(inlines) => Some(
+                            inlines
+                                .iter()
+                                .map(|&inline| inline.try_into().unwrap())
+                                .collect(),
+                        ),
+                        _ => None,
+                    })
+                    .ok_or(())?,
             },
             b"infirm-tag" => {
                 let name = value.get_owned(JanetKeyword::new(b"name")).unwrap();
@@ -73,9 +144,94 @@ impl TryFrom<Janet> for NorgBlock {
                 let name = name.to_string();
                 NorgBlock::InfirmTag { params: None, name }
             }
+            b"unordered-list" | b"ordered-list" | b"quote" => {
+                let level = value.get_owned(JanetKeyword::new(b"level")).unwrap();
+                let TaggedJanet::Number(level) = level.unwrap() else {
+                    unimplemented!();
+                };
+                let level = level as u16;
+                let items: Vec<ListItem> =
+                    match value.get(JanetKeyword::new(b"items")).ok_or(())?.unwrap() {
+                        TaggedJanet::Array(items) => {
+                            items.iter().map(|&item| item.try_into().unwrap()).collect()
+                        }
+                        _ => vec![],
+                    };
+                match kind.as_bytes() {
+                    b"unorderd-list" => Self::UnorderedList {
+                        params: None,
+                        level,
+                        items,
+                    },
+                    b"orderd-list" => Self::OrderedList {
+                        params: None,
+                        level,
+                        items,
+                    },
+                    b"quote-list" => Self::Quote {
+                        params: None,
+                        level,
+                        items,
+                    },
+                    _ => unreachable!(),
+                }
+            }
             _ => unimplemented!("implement for kind: {kind}"),
         };
         Ok(node)
+    }
+}
+
+impl Into<Janet> for ListItem {
+    fn into(self) -> Janet {
+        JanetStruct::builder(3)
+            .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"list-item"))
+            .put(
+                JanetKeyword::new(b"params"),
+                match self.params {
+                    Some(params) => Janet::string(params.as_bytes().into()),
+                    None => Janet::nil(),
+                },
+            )
+            .put(
+                JanetKeyword::new(b"contents"),
+                Janet::tuple(self.contents.into_iter().collect()),
+            )
+            .finalize()
+            .into()
+    }
+}
+
+impl TryFrom<Janet> for ListItem {
+    // TODO: use actual error instead
+    type Error = ();
+
+    fn try_from(value: Janet) -> Result<Self, Self::Error> {
+        let TaggedJanet::Struct(value) = value.unwrap() else {
+            panic!("no struct");
+        };
+        let kind = value
+            .get(JanetKeyword::new(b"kind"))
+            .and_then(|&kind| match kind.unwrap() {
+                TaggedJanet::Keyword(kind) => Some(kind),
+                _ => None,
+            })
+            .ok_or(())?;
+        let contents: Vec<NorgBlock> = match value
+            .get(JanetKeyword::new(b"contents"))
+            .ok_or(())?
+            .unwrap()
+        {
+            TaggedJanet::Array(blocks) => blocks
+                .iter()
+                .map(|&block| block.try_into().unwrap())
+                .collect(),
+            _ => vec![],
+        };
+        Ok(Self {
+            params: None,
+            contents,
+        })
     }
 }
 
@@ -90,6 +246,13 @@ impl Into<Janet> for NorgBlock {
                 contents,
             } => JanetStruct::builder(5)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"section"))
+                .put(
+                    JanetKeyword::new(b"params"),
+                    match params {
+                        Some(params) => Janet::string(params.as_bytes().into()),
+                        None => Janet::nil(),
+                    },
+                )
                 .put(JanetKeyword::new(b"level"), level as usize)
                 .put(
                     JanetKeyword::new(b"heading"),
@@ -99,7 +262,7 @@ impl Into<Janet> for NorgBlock {
                     },
                 )
                 .put(
-                    JanetKeyword::new(b"content"),
+                    JanetKeyword::new(b"contents"),
                     Janet::tuple(contents.into_iter().collect()),
                 )
                 .finalize()
@@ -113,7 +276,10 @@ impl Into<Janet> for NorgBlock {
                         None => Janet::nil(),
                     },
                 )
-                .put("inlines", Janet::tuple(inlines.into_iter().collect()))
+                .put(
+                    JanetKeyword::new(b"inlines"),
+                    Janet::tuple(inlines.into_iter().collect()),
+                )
                 .finalize()
                 .into(),
             InfirmTag { params, name } => JanetStruct::builder(3)
@@ -151,6 +317,54 @@ impl Into<Janet> for NorgBlock {
             Embed { params, export } => JanetStruct::builder(3)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"embed"))
                 .put(JanetKeyword::new(b"export"), export)
+                .finalize()
+                .into(),
+            UnorderedList {
+                params,
+                level,
+                items,
+            } => JanetStruct::builder(4)
+                .put(
+                    JanetKeyword::new(b"kind"),
+                    JanetKeyword::new(b"unordered-list"),
+                )
+                .put(JanetKeyword::new(b"level"), level as usize)
+                .put(
+                    JanetKeyword::new(b"items"),
+                    Janet::tuple(items.into_iter().collect()),
+                )
+                .finalize()
+                .into(),
+            OrderedList {
+                params,
+                level,
+                items,
+            } => JanetStruct::builder(4)
+                .put(
+                    JanetKeyword::new(b"kind"),
+                    JanetKeyword::new(b"ordered-list"),
+                )
+                .put(JanetKeyword::new(b"level"), level as usize)
+                .put(
+                    JanetKeyword::new(b"items"),
+                    Janet::tuple(items.into_iter().collect()),
+                )
+                .finalize()
+                .into(),
+            Quote {
+                params,
+                level,
+                items,
+            } => JanetStruct::builder(4)
+                .put(
+                    JanetKeyword::new(b"kind"),
+                    JanetKeyword::new(b"quote"),
+                )
+                .put(JanetKeyword::new(b"level"), level as usize)
+                .put(
+                    JanetKeyword::new(b"items"),
+                    Janet::tuple(items.into_iter().collect()),
+                )
                 .finalize()
                 .into(),
             _ => unimplemented!(),

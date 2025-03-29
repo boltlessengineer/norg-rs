@@ -1,4 +1,4 @@
-use crate::{block::NorgBlock, inline::NorgInline};
+use crate::{block::{ListItem, NorgBlock}, inline::NorgInline};
 
 pub fn parse(text: &[u8]) -> Vec<NorgBlock> {
     let mut parser = tree_sitter::Parser::new();
@@ -82,6 +82,63 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                 Some(NorgBlock::CarryoverTag {
                     name,
                     params: raw_param,
+                })
+            }
+            "unordered_list" => {
+                let prefix_node = node.child(0).unwrap().child(0).unwrap();
+                let prefix_count = prefix_node.utf8_text(text).unwrap().len();
+                Some(NorgBlock::UnorderedList {
+                    params: None,
+                    level: prefix_count as u16,
+                    items: {
+                        let mut cursor = node.walk();
+                        node.named_children(&mut cursor)
+                            .map(|node| {
+                                ListItem {
+                                    params: None,
+                                    contents: tsnode_to_blocks(node, text),
+                                }
+                            })
+                            .collect()
+                    },
+                })
+            }
+            "ordered_list" => {
+                let prefix_node = node.child(0).unwrap().child(0).unwrap();
+                let prefix_count = prefix_node.utf8_text(text).unwrap().len();
+                Some(NorgBlock::OrderedList {
+                    params: None,
+                    level: prefix_count as u16,
+                    items: {
+                        let mut cursor = node.walk();
+                        node.named_children(&mut cursor)
+                            .map(|node| {
+                                ListItem {
+                                    params: None,
+                                    contents: tsnode_to_blocks(node, text),
+                                }
+                            })
+                            .collect()
+                    },
+                })
+            }
+            "quote" => {
+                let prefix_node = node.child(0).unwrap().child(0).unwrap();
+                let prefix_count = prefix_node.utf8_text(text).unwrap().len();
+                Some(NorgBlock::Quote {
+                    params: None,
+                    level: prefix_count as u16,
+                    items: {
+                        let mut cursor = node.walk();
+                        node.named_children(&mut cursor)
+                            .map(|node| {
+                                ListItem {
+                                    params: None,
+                                    contents: tsnode_to_blocks(node, text),
+                                }
+                            })
+                            .collect()
+                    },
                 })
             }
             _ => None,
