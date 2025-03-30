@@ -8,7 +8,7 @@ fn main() {
     let janet_script = format!(r#"
         (do
           (def env (make-env))
-          (def entry-env (dofile "test-html.janet" :env env))
+          (def entry-env (dofile "janet-src/embed.janet" :env env))
           (def- main ((entry-env 'main) :value))
           (def mdict (invert (env-lookup root-env)))
           (def image (marshal main mdict))

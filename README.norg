@@ -32,7 +32,7 @@ Text -(rust)-> Vec<Block> -(janet)-> Other spec
 
 - (x) marshal janet to an image and provide api to embed in rust binary
 - (x) pass janet result to rust
-- ( ) test janet exporter as single rust binary
+- (x) test janet exporter as single rust binary
 - ( ) method to override the existing export logic (not adding new one like tags)
 - ( ) api to resolve links
 - ( ) embed `stdlib.janet` into rust

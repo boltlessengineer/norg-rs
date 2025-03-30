@@ -103,7 +103,15 @@
                         (html/create-attrs {:src src})
                         ">")))}])
 
-(def norg/inline-tag @{"img" norg/inline-tag/img})
+(defn norg/inline-tag/gh
+  [[src] markup]
+  [{:kind :link
+    :target src
+    :markup [{:kind :text
+              :text src}]}])
+
+(def norg/inline-tag @{"img" norg/inline-tag/img
+                       "gh" norg/inline-tag/gh})
 
 (defn neorg/export/inline
   "export norg inline node"
