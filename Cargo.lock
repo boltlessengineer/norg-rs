@@ -84,12 +84,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "const_fn"
-version = "0.4.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f8a2ca5ac02d09563609681103aada9e1777d54fc57a5acd7a41404f9c93b6e"
-
-[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -152,8 +146,6 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 [[package]]
 name = "janetrs"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0acf202401e26d4065573dacbdddf6cc9219bcdc5cd2af2edba134c8a8018b5a"
 dependencies = [
  "bstr",
  "evil-janet",
@@ -166,8 +158,6 @@ dependencies = [
 [[package]]
 name = "janetrs_macros"
 version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af368054a7d8fff616e44b9b3412c507de6af59a4e68369bd2d35256c3d4384b"
 dependencies = [
  "janetrs_version",
  "proc-macro2",
@@ -178,10 +168,7 @@ dependencies = [
 [[package]]
 name = "janetrs_version"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9d17ff79320e948dda566ba2042686c6c962e63fdda30b5e62b48f9118f3a7f"
 dependencies = [
- "const_fn",
  "evil-janet",
 ]
 

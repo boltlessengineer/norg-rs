@@ -78,20 +78,15 @@
 
 (defn- norg/tag/eval
   [params lines]
-  (pp lines)
   (defn chunk-string [lines]
     (def lines (reverse lines))
     (fn [buf _]
       (when-let [line (array/pop lines)]
         (buffer/push buf line))))
-  # FIXME: pass correct environment
-  (def env (make-env (curenv)))
-  (run-context
-    {:env env
-     :chunks (chunk-string lines)
-     :on-status (fn [fiber value]
-                  (printf "> %q (%q)" value (fiber/status fiber)))})
   # evaluate given lines
+  (run-context
+    {:env (curenv)
+     :chunks (chunk-string lines)})
   [])
 
 (defn- norg/inline-tag/img
@@ -149,7 +144,9 @@
               :macro (let [name (inline :name)
                            params (inline :attrs)
                            markup []
-                           ast ((norg/ast/tag (string "\\" name)) params markup)]
+                           tag (norg/ast/tag (string "\\" name))]
+                       (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
+                       (def ast (tag params markup))
                        (string/join (map |(norg/export/inline lang $ ctx) ast)))
               :link (let [href (inline :target)]
                       (string
@@ -187,12 +184,16 @@
                              "</p>\n"))
               :infirm-tag (let [name (block :name)
                                 params (string/split ";" (block :params))
-                                ast ((norg/ast/tag name) params)]
+                                tag (norg/ast/tag name)]
+                            (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
+                            (def ast (tag params))
                             (string/join (map |(norg/export/block lang $ ctx) ast)))
               :ranged-tag (let [name (block :name)
                                 params (string/split ";" (block :params))
                                 lines (block :content)
-                                ast ((norg/ast/tag name) params lines)]
+                                tag (norg/ast/tag name)]
+                            (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
+                            (def ast (tag params lines))
                             (string/join (map |(norg/export/block lang $ ctx) ast)))
               :embed (((block :export) lang) ctx)
               :unordered-list (let [#params (string/split ";" (block :params))

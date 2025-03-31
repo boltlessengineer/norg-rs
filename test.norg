@@ -1,7 +1,6 @@
 * heading text
 *this ~is~ a paragraph*
 \img(path/to/image.png)
-\gh(nvim-neorg/norg-specs)
 
 .image path/to/image.png
 
@@ -10,10 +9,17 @@ print("hello world")
 @end
 
 @eval asdf
-(print "is @eval working")
-(pp (curenv))
-(print message)
+# add custom tag while exporting document
+(put norg/ast/tag
+     "\\gh"
+     (fn [[src] markup]
+       [{:kind :link
+         :target (string "https://github.com/" src)
+         :markup [{:kind :text
+                   :text src}]}]))
 @end
+
+\gh(nvim-neorg/norg-specs)
 
 > list item
 > second list item
