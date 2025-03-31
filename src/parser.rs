@@ -168,7 +168,6 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
             "strikethrough" => Some(NorgInline::Strikethrough(tsnode_to_inlines(node, text))),
             "verbatim" => Some(NorgInline::Verbatim(tsnode_to_inlines(node, text))),
             "inline_macro" => {
-                dbg!(node.to_sexp());
                 let name = node
                     .child_by_field_name("name")
                     .unwrap()

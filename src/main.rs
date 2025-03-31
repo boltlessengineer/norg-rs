@@ -68,9 +68,12 @@ fn test_high_unmarshal(ast: Vec<NorgBlock>, lang: ExportTarget) -> Result<String
         jfunc
     };
     let res = func.call(&mut [
-        Janet::tuple(ast.into_iter().collect()),
         Janet::keyword(lang.into()),
-    ]).or(Err(()))?;
+        Janet::tuple(ast.into_iter().collect()),
+    ]);
+    let Ok(res) = res else {
+        panic!("{:?}", res);
+    };
     match res.unwrap() {
         janetrs::TaggedJanet::String(janet_string) => Ok(janet_string.to_string()),
         _ => Err(()),
@@ -81,7 +84,7 @@ fn main() {
     let text = std::fs::read("test.norg").unwrap();
     let ast = norg_rs::parser::parse(&text);
 
-    dbg!(&ast);
+    // dbg!(&ast);
 
     println!("original document:");
     println!("{}", String::from_utf8_lossy(&text));

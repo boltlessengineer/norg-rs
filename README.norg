@@ -34,6 +34,20 @@ Text -(rust)-> Vec<Block> -(janet)-> Other spec
 - (x) pass janet result to rust
 - (x) test janet exporter as single rust binary
 - ( ) method to override the existing export logic (not adding new one like tags)
+--- (x) write proper /neorg environment/ in janet
+----- (x) make `stdlib.janet` extendable.
+------- (x) how to export anchors? They should be known before exporting
+>>>>>>>>> use `ctx` to store all those values. `(neorg/parse)` is responsible to
+          handle multiple anchors
+----- (x) `neorg.janet` which imports `stdlib` and defines application-specific apis
+----- (x) `neorg.janet` is the /neorg environemnt/ we need.
+--- ( ) compile the /neorg environment/ to image. This is a marshalled table that
+    contains all required methods like `norg/export/doc` and all other stuffs.
+    This image can be either embed to binary code or load from `jimage` file.
+--- ( ) load environment from image
+--- ( ) override some user-defined tags
+--- ( ) run `(neorg/export/doc :html ast)`
+>>>>> Each files will load separate environment to separate in-file tag definitions.
 - ( ) api to resolve links
 - ( ) embed `stdlib.janet` into rust
 - ( ) package as rust crate

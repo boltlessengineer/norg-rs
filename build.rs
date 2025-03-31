@@ -27,4 +27,5 @@ fn main() {
         panic!("janet command failed: {}", String::from_utf8_lossy(&output.stderr));
     }
     println!("cargo::rerun-if-changed=build.rs");
+    println!("cargo::rerun-if-changed=janet-src");
 }

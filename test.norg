@@ -6,7 +6,13 @@
 .image path/to/image.png
 
 @code python
-print
+print("hello world")
+@end
+
+@eval asdf
+(print "is @eval working")
+(pp (curenv))
+(print message)
 @end
 
 > list item
