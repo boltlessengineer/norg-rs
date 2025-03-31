@@ -146,6 +146,7 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 [[package]]
 name = "janetrs"
 version = "0.8.0"
+source = "git+https://github.com/boltlessengineer/janetrs?branch=feat%2Funmarshal#8c6fcea9e287e934d4e0aacffa77284fe0c3794b"
 dependencies = [
  "bstr",
  "evil-janet",
@@ -158,6 +159,7 @@ dependencies = [
 [[package]]
 name = "janetrs_macros"
 version = "0.7.3"
+source = "git+https://github.com/boltlessengineer/janetrs?branch=feat%2Funmarshal#8c6fcea9e287e934d4e0aacffa77284fe0c3794b"
 dependencies = [
  "janetrs_version",
  "proc-macro2",
@@ -168,6 +170,7 @@ dependencies = [
 [[package]]
 name = "janetrs_version"
 version = "0.1.0"
+source = "git+https://github.com/boltlessengineer/janetrs?branch=feat%2Funmarshal#8c6fcea9e287e934d4e0aacffa77284fe0c3794b"
 dependencies = [
  "evil-janet",
 ]
@@ -380,6 +383,7 @@ checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
 [[package]]
 name = "tree-sitter-norg"
 version = "0.0.1"
+source = "git+https://github.com/boltlessengineer/tree-sitter-norg3-pr1?branch=experiment#8fb3bba989739f5ef080d4f80381708670dbac78"
 dependencies = [
  "cc",
  "tree-sitter-language",

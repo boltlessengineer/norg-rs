@@ -23,7 +23,7 @@ static NEORG_IMAGE_EMBED: &[u8] = include_bytes!("../janet-src/stdlib.jimage");
 fn export(target: ExportTarget, ast: Vec<norg_rs::block::NorgBlock>) -> Result<String, ()> {
     let client = JanetClient::init().unwrap();
     let norg_env: janetrs::JanetTable = client.unmarshal(NEORG_IMAGE_EMBED).try_into().unwrap();
-    let mut client = client.load_env(JanetEnvironment::with(norg_env));
+    let mut client = client.load_env(JanetEnvironment::new(norg_env));
     client.add_def(DefOptions::new(
         "ast",
         Janet::tuple(ast.into_iter().collect()),
