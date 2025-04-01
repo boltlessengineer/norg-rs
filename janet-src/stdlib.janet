@@ -22,18 +22,18 @@
 #   # expect linkable to be a link or an anchor
 #   linkable)
 
-(defn norg/parse/doc
-  "parse document"
-  [text]
-  (cond
-    (string? text) (error "todo")
-    (array? text) (error "todo")
-    (tuple? text) (error "todo")))
+# (defn norg/parse/doc
+#   "parse document"
+#   [text]
+#   (cond
+#     (string? text) (error "todo")
+#     (array? text) (error "todo")
+#     (tuple? text) (error "todo")))
 
-(defn norg/parse/inline
-  "parse inline text"
-  [text]
-  (error "todo"))
+# (defn norg/parse/inline
+#   "parse inline text"
+#   [text]
+#   (error "todo"))
 
 (defn- norg/tag/image
   ".image implementation"

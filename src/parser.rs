@@ -11,6 +11,7 @@ pub fn parse(text: &[u8]) -> Vec<NorgBlock> {
         .expect("Error loading Norg parser");
     let tree = parser.parse(&text, None).unwrap();
     let root = tree.root_node();
+    dbg!(root.to_sexp());
     tsnode_to_blocks(root, text)
 }
 
@@ -145,28 +146,44 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
 
 fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
     let mut cursor = node.walk();
+    use NorgInline::*;
     node.named_children(&mut cursor)
         .map(|node| match node.kind() {
-            "whitespace" => Some(NorgInline::Whitespace),
-            "soft_break" => Some(NorgInline::SoftBreak),
+            "whitespace" => Some(Whitespace),
+            "soft_break" => Some(SoftBreak),
             "word" => {
                 let text = node.utf8_text(text).unwrap().to_string();
-                Some(NorgInline::Text(text))
+                Some(Text(text))
             }
             "punctuation" => {
                 let text = node.utf8_text(text).unwrap().to_string();
-                Some(NorgInline::Special(text))
+                Some(Special(text))
             }
             "escape_sequence" => {
                 let character = node.utf8_text(text).unwrap().chars().nth(1).unwrap();
-                Some(NorgInline::Escape(character))
+                Some(Escape(character))
             }
             // TODO: add attributes
-            "bold" => Some(NorgInline::Bold(tsnode_to_inlines(node, text))),
-            "italic" => Some(NorgInline::Italic(tsnode_to_inlines(node, text))),
-            "underline" => Some(NorgInline::Underline(tsnode_to_inlines(node, text))),
-            "strikethrough" => Some(NorgInline::Strikethrough(tsnode_to_inlines(node, text))),
-            "verbatim" => Some(NorgInline::Verbatim(tsnode_to_inlines(node, text))),
+            "bold" => Some(Bold {
+                attrs: get_attributes_from_tsnode(node, text),
+                markup: tsnode_to_inlines(node, text),
+            }),
+            "italic" => Some(Italic {
+                attrs: get_attributes_from_tsnode(node, text),
+                markup: tsnode_to_inlines(node, text),
+            }),
+            "underline" => Some(Underline {
+                attrs: get_attributes_from_tsnode(node, text),
+                markup: tsnode_to_inlines(node, text),
+            }),
+            "strikethrough" => Some(Strikethrough {
+                attrs: get_attributes_from_tsnode(node, text),
+                markup: tsnode_to_inlines(node, text),
+            }),
+            "verbatim" => Some(Verbatim {
+                attrs: get_attributes_from_tsnode(node, text),
+                markup: tsnode_to_inlines(node, text),
+            }),
             "inline_macro" => {
                 let name = node
                     .child_by_field_name("name")
@@ -182,7 +199,7 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
                             .map(|attr| attr.utf8_text(text).unwrap().to_string())
                             .collect()
                     });
-                Some(NorgInline::Macro { name, attrs })
+                Some(Macro { name, attrs })
             }
             "link" => {
                 let target = node
@@ -194,7 +211,7 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
                 let markup = node
                     .child_by_field_name("description")
                     .map(|node| tsnode_to_inlines(node, text));
-                Some(NorgInline::Link { target, markup })
+                Some(Link { target, markup })
             }
             "anchor" => {
                 let target = node
@@ -202,10 +219,19 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
                     .map(|node| node.utf8_text(text).unwrap().to_string());
                 let markup =
                     tsnode_to_inlines(node.child_by_field_name("description").unwrap(), text);
-                Some(NorgInline::Anchor { target, markup })
+                Some(Anchor { target, markup })
             }
             _ => None,
         })
         .flatten()
         .collect()
+}
+
+fn get_attributes_from_tsnode(node: tree_sitter::Node, text: &[u8]) -> Option<Vec<String>> {
+    node.child_by_field_name("attributes").map(|node| {
+        let mut cursor = node.walk();
+        node.named_children(&mut cursor)
+            .map(|attr_node| attr_node.utf8_text(text).unwrap().to_string())
+            .collect()
+    })
 }

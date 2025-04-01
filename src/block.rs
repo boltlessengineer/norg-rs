@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 use janetrs::{Janet, JanetFunction, JanetKeyword, JanetStruct, TaggedJanet};
 
 use crate::inline::NorgInline;
@@ -209,9 +206,7 @@ impl TryFrom<Janet> for ListItem {
     type Error = ();
 
     fn try_from(value: Janet) -> Result<Self, Self::Error> {
-        let TaggedJanet::Struct(value) = value.unwrap() else {
-            panic!("no struct");
-        };
+        let value: JanetStruct = value.try_unwrap().or(Err(()))?;
         let kind = value
             .get(JanetKeyword::new(b"kind"))
             .and_then(|&kind| match kind.unwrap() {
@@ -219,6 +214,9 @@ impl TryFrom<Janet> for ListItem {
                 _ => None,
             })
             .ok_or(())?;
+        if kind != JanetKeyword::new(b"list-item") {
+            return Err(());
+        }
         let contents: Vec<NorgBlock> = match value
             .get(JanetKeyword::new(b"contents"))
             .ok_or(())?
@@ -318,6 +316,13 @@ impl Into<Janet> for NorgBlock {
                 .into(),
             Embed { params, export } => JanetStruct::builder(3)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"embed"))
+                .put(
+                    JanetKeyword::new(b"params"),
+                    match params {
+                        Some(params) => Janet::string(params.as_bytes().into()),
+                        None => Janet::nil(),
+                    },
+                )
                 .put(JanetKeyword::new(b"export"), export)
                 .finalize()
                 .into(),
@@ -329,6 +334,13 @@ impl Into<Janet> for NorgBlock {
                 .put(
                     JanetKeyword::new(b"kind"),
                     JanetKeyword::new(b"unordered-list"),
+                )
+                .put(
+                    JanetKeyword::new(b"params"),
+                    match params {
+                        Some(params) => Janet::string(params.as_bytes().into()),
+                        None => Janet::nil(),
+                    },
                 )
                 .put(JanetKeyword::new(b"level"), level as usize)
                 .put(
@@ -346,6 +358,13 @@ impl Into<Janet> for NorgBlock {
                     JanetKeyword::new(b"kind"),
                     JanetKeyword::new(b"ordered-list"),
                 )
+                .put(
+                    JanetKeyword::new(b"params"),
+                    match params {
+                        Some(params) => Janet::string(params.as_bytes().into()),
+                        None => Janet::nil(),
+                    },
+                )
                 .put(JanetKeyword::new(b"level"), level as usize)
                 .put(
                     JanetKeyword::new(b"items"),
@@ -361,6 +380,13 @@ impl Into<Janet> for NorgBlock {
                 .put(
                     JanetKeyword::new(b"kind"),
                     JanetKeyword::new(b"quote"),
+                )
+                .put(
+                    JanetKeyword::new(b"params"),
+                    match params {
+                        Some(params) => Janet::string(params.as_bytes().into()),
+                        None => Janet::nil(),
+                    },
                 )
                 .put(JanetKeyword::new(b"level"), level as usize)
                 .put(

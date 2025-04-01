@@ -193,9 +193,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.26"
+version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
+checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "memchr"
@@ -383,7 +383,7 @@ checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
 [[package]]
 name = "tree-sitter-norg"
 version = "0.0.1"
-source = "git+https://github.com/boltlessengineer/tree-sitter-norg3-pr1?branch=experiment#8fb3bba989739f5ef080d4f80381708670dbac78"
+source = "git+https://github.com/boltlessengineer/tree-sitter-norg3-pr1?branch=experiment#f90ca238ee37d6dde9b80bd2c33f1ec4aae55d54"
 dependencies = [
  "cc",
  "tree-sitter-language",

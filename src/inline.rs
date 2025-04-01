@@ -9,12 +9,27 @@ pub enum NorgInline {
     Escape(char),
     Whitespace,
     SoftBreak,
-    Bold(Vec<Self>),
-    Italic(Vec<Self>),
-    Underline(Vec<Self>),
-    Strikethrough(Vec<Self>),
-    Verbatim(Vec<Self>),
-    // TODO: rename this to "tag"
+    Bold {
+        markup: Vec<Self>,
+        attrs: Option<Vec<String>>,
+    },
+    Italic {
+        markup: Vec<Self>,
+        attrs: Option<Vec<String>>,
+    },
+    Underline {
+        markup: Vec<Self>,
+        attrs: Option<Vec<String>>,
+    },
+    Strikethrough {
+        markup: Vec<Self>,
+        attrs: Option<Vec<String>>,
+    },
+    Verbatim {
+        markup: Vec<Self>,
+        attrs: Option<Vec<String>>,
+    },
+    // TODO: rename this to "InlineTag"
     Macro {
         name: String,
         // markup: Option<Vec<NorgInline>>,
@@ -31,6 +46,13 @@ pub enum NorgInline {
     },
     // TODO: embed
 }
+
+// IF abstract objects are janet abstact type
+// - no need to serialize
+// - have to implement method to get all properties
+//
+// IF abstract objects can be represented in janet struct type
+// - need to implement serializing logic for EVERY objects
 
 impl TryFrom<Janet> for NorgInline {
     // TODO: use actual error instead
@@ -90,12 +112,28 @@ impl TryFrom<Janet> for NorgInline {
                         _ => None,
                     })
                     .ok_or(())?;
+                let attrs = value
+                    .get(JanetKeyword::new(b"attrs"))
+                    .and_then(|attr| match attr.unwrap() {
+                        TaggedJanet::Tuple(attr) => Some(
+                            attr.iter()
+                                .map(|&attr| {
+                                    let attr =
+                                        attr.try_unwrap().map(|attr: JanetString| attr.to_string());
+                                    attr
+                                })
+                                .collect(),
+                        ),
+                        _ => None,
+                    })
+                    .transpose()
+                    .or(Err(()))?;
                 match kind.as_bytes() {
-                    b"bold" => Ok(NorgInline::Bold(markup)),
-                    b"italic" => Ok(NorgInline::Italic(markup)),
-                    b"underline" => Ok(NorgInline::Underline(markup)),
-                    b"strikethrough" => Ok(NorgInline::Strikethrough(markup)),
-                    b"verbatim" => Ok(NorgInline::Verbatim(markup)),
+                    b"bold" => Ok(NorgInline::Bold { markup, attrs }),
+                    b"italic" => Ok(NorgInline::Italic { markup, attrs }),
+                    b"underline" => Ok(NorgInline::Underline { markup, attrs }),
+                    b"strikethrough" => Ok(NorgInline::Strikethrough { markup, attrs }),
+                    b"verbatim" => Ok(NorgInline::Verbatim { markup, attrs }),
                     _ => unreachable!(),
                 }
             }
@@ -109,21 +147,20 @@ impl TryFrom<Janet> for NorgInline {
                     .ok_or(())?,
                 attrs: value
                     .get(JanetKeyword::new(b"attrs"))
-                    .and_then(|attrs| match attrs.unwrap() {
-                        TaggedJanet::Tuple(attrs) => Some(Some(attrs)),
-                        TaggedJanet::Nil => Some(None),
+                    .and_then(|attr| match attr.unwrap() {
+                        TaggedJanet::Tuple(attr) => Some(
+                            attr.iter()
+                                .map(|&attr| {
+                                    let attr =
+                                        attr.try_unwrap().map(|attr: JanetString| attr.to_string());
+                                    attr
+                                })
+                                .collect(),
+                        ),
                         _ => None,
                     })
-                    .ok_or(())?
-                    .map(|attrs| {
-                        attrs
-                            .iter()
-                            .map(|&attr| match attr.unwrap() {
-                                TaggedJanet::String(attr) => attr.to_string(),
-                                _ => todo!("error here"),
-                            })
-                            .collect()
-                    }),
+                    .transpose()
+                    .or(Err(()))?,
             }),
             b"link" | b"anchor" => {
                 let target =
@@ -183,28 +220,28 @@ impl Into<Janet> for NorgInline {
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"escape"))
                 .put(JanetKeyword::new(b"escape"), c)
                 .finalize(),
-            Bold(markup) => JanetStruct::builder(2)
+            Bold { markup, attrs } => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"bold"))
                 .put(
                     JanetKeyword::new(b"markup"),
                     Janet::tuple(markup.into_iter().collect()),
                 )
                 .finalize(),
-            Italic(markup) => JanetStruct::builder(2)
+            Italic { markup, attrs } => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"italic"))
                 .put(
                     JanetKeyword::new(b"markup"),
                     Janet::tuple(markup.into_iter().collect()),
                 )
                 .finalize(),
-            Underline(markup) => JanetStruct::builder(2)
+            Underline { markup, attrs } => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"underline"))
                 .put(
                     JanetKeyword::new(b"markup"),
                     Janet::tuple(markup.into_iter().collect()),
                 )
                 .finalize(),
-            Strikethrough(markup) => JanetStruct::builder(2)
+            Strikethrough { markup, attrs } => JanetStruct::builder(2)
                 .put(
                     JanetKeyword::new(b"kind"),
                     JanetKeyword::new(b"strikethrough"),
@@ -214,7 +251,7 @@ impl Into<Janet> for NorgInline {
                     Janet::tuple(markup.into_iter().collect()),
                 )
                 .finalize(),
-            Verbatim(markup) => JanetStruct::builder(2)
+            Verbatim { markup, attrs } => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"verbatim"))
                 .put(
                     JanetKeyword::new(b"markup"),
