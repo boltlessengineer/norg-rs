@@ -1,6 +1,8 @@
 * heading text
-*this ~is~ a paragraph*
+*this ~is~ a paragraph*(html.class hi)
 \img(path/to/image.png)
+
+{https://github.com}
 
 .image path/to/image.png
 

@@ -37,8 +37,7 @@
 (assert (deep= (h/encode [:span "Hello " [:em "world!"]])
                "<span>Hello <em>world!</em></span>"))
 
-(defn main [str]
-  (pp str)
-  (print
-    (h/encode [:a {:href str} "boltless.me"]))
-  "is this working?")
+(print
+  (h/encode [[:a {:href "asdf"} "boltless.me"]
+             " "
+             [:h1 "heading"]]))

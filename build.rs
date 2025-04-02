@@ -4,6 +4,7 @@ fn main() {
     let output = Command::new("janet")
         .arg("-c")
         .arg("janet-src/stdlib.janet")
+        .env("JANET_PATH", "jpm_tree/lib")
         .output()
         .expect("Failed to execute janet command");
     if !output.status.success() {

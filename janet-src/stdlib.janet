@@ -110,119 +110,157 @@
   "key is tuple of [:target :kind]"
   @{})
 
+# HACK: this should be done from parser
+(defn- parse-attrs [raw]
+  (def attrs @{})
+  (if raw
+    (each s raw
+      (def parts (string/split " " s 0 2))
+      (put attrs (first parts) (if (> (length parts) 1) (parts 1) true))))
+  attrs)
+
+(defn- filter-attrs [lang attrs]
+  (def prefix (string lang "."))
+  (def filtered @{})
+  (loop [[key value] :pairs attrs]
+    (if (string/has-prefix? prefix key)
+      (put filtered (string/slice key 5) value)))
+  filtered)
+
+(defmacro norg/export/inline-html-impl []
+  '(do
+     (defn- merge-html-attrs
+         [& tables]
+         (def merged @{})
+         (each tbl tables
+           (if tbl
+             (loop [[k v] :pairs tbl]
+               (def k (keyword k))
+               (if (string? (merged k))
+                 (put merged k (string (merged k) " " v))
+                 (put merged k v)))))
+         merged)
+     (defn attached-modifier
+       [tag &opt attrs]
+       (string
+         "<" tag
+         (html/create-attrs
+           (merge-html-attrs attrs (filter-attrs :html (parse-attrs (inline :attrs)))))
+         ">"
+         ;(map |(norg/export/inline :html $ ctx) (inline :markup))
+         "</" tag ">"))
+     (case (inline :kind)
+       :whitespace " "
+       :softbreak "\n"
+       :text (html/escape (inline :text))
+       :special (html/escape (inline :special))
+       :bold (attached-modifier :strong)
+       :italic (attached-modifier :em)
+       :underline (attached-modifier :span {:class "underline"})
+       :strikethrough (attached-modifier :span {:class "strikethrough"})
+       :verbatim (attached-modifier :code)
+       :link (let [href (inline :target)
+                   markup (inline :markup)
+                   attrs {:href href}]
+               (string
+                 "<a"
+                 (html/create-attrs
+                   (merge-html-attrs attrs (filter-attrs :html (parse-attrs (inline :attrs)))))
+                 ">"
+                 (if markup
+                   (string/join (map |(norg/export/inline :html $ ctx) markup))
+                   (html/escape href))
+                 "</a>"))
+       :anchor "TODO_ANCHOR"
+       "TODO_INLINE")))
+
 (defn norg/export/inline
   [lang inline ctx]
   (def hook (norg/export-hook [lang (inline :kind)]))
-  (if hook
-    (hook inline ctx)
+  (cond
+    hook (hook inline ctx)
+    (= (inline :kind) :embed) (((inline :export) :html) ctx)
+    (= (inline :kind) :macro) (let [name (inline :name)
+                                    params (parse-attrs (inline :attrs))
+                                    markup []
+                                    tag (norg/ast/tag (string "\\" name))]
+                                (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
+                                (def ast (tag params markup))
+                                (string/join (map |(norg/export/inline lang $ ctx) ast)))
     (case lang
-      :html (case (inline :kind)
-              :whitespace " "
-              :softbreak "\n"
-              :text (inline :text)
-              :special (html/escape (inline :special))
-              :bold (string
-                      "<strong>"
-                      ;(map |(norg/export/inline lang $ ctx) (inline :markup))
-                      "</strong>")
-              :italic (string
-                        "<em>"
-                        ;(map |(norg/export/inline lang $ ctx) (inline :markup))
-                        "</em>")
-              :underline (string
-                           `<span class="underline">`
-                           ;(map |(norg/export/inline lang $ ctx) (inline :markup))
-                           "</span>")
-              :strikethrough (string
-                               `<span class="strikethrough">`
-                               ;(map |(norg/export/inline lang $ ctx) (inline :markup))
-                               "</span>")
-              :verbatim (string
-                          "<code>"
-                          ;(map |(norg/export/inline lang $ ctx) (inline :markup))
-                          "</code>")
-              :macro (let [name (inline :name)
-                           params (inline :attrs)
-                           markup []
-                           tag (norg/ast/tag (string "\\" name))]
-                       (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
-                       (def ast (tag params markup))
-                       (string/join (map |(norg/export/inline lang $ ctx) ast)))
-              :link (let [href (inline :target)]
-                      (string
-                        "<a"
-                        (html/create-attrs {:href href})
-                        ">"
-                        ;(map |(norg/export/inline lang $ ctx) (inline :markup))
-                        "</a>"))
-              :anchor "todo-anchor"
-              :embed (((inline :export) lang) ctx)
-              "TODO_INLINE"))))
+      :html (norg/export/inline-html-impl)
+      # :gfm (norg/export/inline-gfm-impl)
+      (error "unkown language"))))
+
+(defmacro- norg/export/block-html-impl []
+  '(case (block :kind)
+     :section (let [heading (block :heading)
+                    level (block :level)
+                    level (if (> level 6) 6 level)
+                    contents (block :contents)]
+               (string
+                "<section>\n"
+                ;(if heading
+                   ["<h" level ">"
+                     ;(map |(norg/export/inline :html $ ctx) heading)
+                     "</h" level ">\n"])
+                 ;(map |(norg/export/block lang $ ctx) contents)
+                 "</section>\n"))
+     :paragraph (let [inlines (block :inlines)]
+                 (string
+                   "<p>"
+                   ;(map |(norg/export/inline :html $ ctx) inlines)
+                   "</p>\n"))
+     :unordered-list (let [#params (string/split ";" (block :params))
+                           items (block :items)]
+                       (string
+                         "<ul>\n"
+                         ;(map |(norg/export/block :html $ ctx) items)
+                         "</ul>\n"))
+     :ordered-list (let [#params (string/split ";" (block :params))
+                         items (block :items)]
+                     (string
+                       "<ol>\n"
+                       ;(map |(norg/export/block :html $ ctx) items)
+                       "</ol>\n"))
+     :quote (let [#params (string/split ";" (block :params))
+                  items (block :items)]
+             (string
+              "<blockquote>\n"
+              ;(map |(string/join
+                      (map |(norg/export/block :html $ ctx) ($ :contents)))
+                    items)
+              "</blockquote>\n"))
+     :list-item (let [#params (string/split ";" (block :params))
+                      contents (block :contents)]
+                 (string
+                   "<li>\n"
+                   ;(map |(norg/export/block :html $ ctx) contents)
+                   "</li>\n"))
+     "TODO_BLOCK\n"))
 
 (defn norg/export/block
   [lang block ctx]
-  (if-let [hook (norg/export-hook [lang (block :kind)])]
-    (hook block ctx)
+  (def hook (norg/export-hook [lang (block :kind)]))
+  (cond
+    hook (hook block ctx)
+    (= (block :kind) :embed) (((block :export) :html) ctx)
+    (= (block :kind) :infirm-tag) (let [name (block :name)
+                                        params (string/split ";" (block :params))
+                                        tag (norg/ast/tag name)]
+                                    (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
+                                    (def ast (tag params))
+                                    (string/join (map |(norg/export/block lang $ ctx) ast)))
+    (= (block :kind) :ranged-tag) (let [name (block :name)
+                                        params (string/split ";" (block :params))
+                                        lines (block :content)
+                                        tag (norg/ast/tag name)]
+                                    (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
+                                    (def ast (tag params lines))
+                                    (string/join (map |(norg/export/block lang $ ctx) ast)))
     (case lang
-      :html (case (block :kind)
-              :section (let [heading (block :heading)
-                             level (block :level)
-                             level (if (> level 6) 6 level)
-                             contents (block :contents)]
-                         (string
-                           "<section>\n"
-                           ;(if heading
-                              ["<h" level ">"
-                               ;(map |(norg/export/inline lang $ ctx) heading)
-                               "</h" level ">\n"])
-                           ;(map |(norg/export/block lang $ ctx) contents)
-                           "</section>\n"))
-              :paragraph (let [inlines (block :inlines)]
-                           (string
-                             "<p>"
-                             ;(map |(norg/export/inline lang $ ctx) inlines)
-                             "</p>\n"))
-              :infirm-tag (let [name (block :name)
-                                params (string/split ";" (block :params))
-                                tag (norg/ast/tag name)]
-                            (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
-                            (def ast (tag params))
-                            (string/join (map |(norg/export/block lang $ ctx) ast)))
-              :ranged-tag (let [name (block :name)
-                                params (string/split ";" (block :params))
-                                lines (block :content)
-                                tag (norg/ast/tag name)]
-                            (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
-                            (def ast (tag params lines))
-                            (string/join (map |(norg/export/block lang $ ctx) ast)))
-              :embed (((block :export) lang) ctx)
-              :unordered-list (let [#params (string/split ";" (block :params))
-                                    items (block :items)]
-                                (string
-                                  "<ul>\n"
-                                  ;(map |(norg/export/block lang $ ctx) items)
-                                  "</ul>\n"))
-              :ordered-list (let [#params (string/split ";" (block :params))
-                                  items (block :items)]
-                              (string
-                                "<ol>\n"
-                                ;(map |(norg/export/block lang $ ctx) items)
-                                "</ol>\n"))
-              :quote (let [#params (string/split ";" (block :params))
-                           items (block :items)]
-                       (string
-                         "<blockquote>\n"
-                         ;(map |(string/join
-                                  (map |(norg/export/block lang $ ctx) ($ :contents)))
-                               items)
-                         "</blockquote>\n"))
-              :list-item (let [#params (string/split ";" (block :params))
-                               contents (block :contents)]
-                           (string
-                             "<li>\n"
-                             ;(map |(norg/export/block lang $ ctx) contents)
-                             "</li>\n"))
-              "TODO_BLOCK\n"))))
+      :html (norg/export/block-html-impl)
+      (error "unkown language"))))
 
 (defn norg/export/doc
   [lang ast & ctx]
