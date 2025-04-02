@@ -110,13 +110,13 @@
   "key is tuple of [:target :kind]"
   @{})
 
-# HACK: this should be done from parser
-(defn- parse-attrs [raw]
+(defn- parse-attrs [attr-list]
   (def attrs @{})
-  (if raw
-    (each s raw
-      (def parts (string/split " " s 0 2))
-      (put attrs (first parts) (if (> (length parts) 1) (parts 1) true))))
+  (if attr-list
+    (each attr attr-list
+      (match attr
+        [key value] (put attrs key value)
+        [key] (put attrs key true))))
   attrs)
 
 (defn- filter-attrs [lang attrs]

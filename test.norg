@@ -23,6 +23,8 @@ print("hello world")
 
 \gh(nvim-neorg/norg-specs)
 
+{link}(html.class my-class)
+
 > list item
 > second list item
 -- asdf
