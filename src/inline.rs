@@ -131,7 +131,7 @@ impl TryFrom<Janet> for NorgInline {
                 let markup = value
                     .get(JanetKeyword::new(b"markup"))
                     .and_then(|inlines| match inlines.unwrap() {
-                        TaggedJanet::Array(inlines) => Some(
+                        TaggedJanet::Tuple(inlines) => Some(
                             inlines
                                 .iter()
                                 .map(|&inline| inline.try_into().unwrap())
@@ -185,7 +185,7 @@ impl TryFrom<Janet> for NorgInline {
                     });
                 let markup = value.get(JanetKeyword::new(b"markup")).and_then(|inlines| {
                     match inlines.unwrap() {
-                        TaggedJanet::Array(inlines) => Some(
+                        TaggedJanet::Tuple(inlines) => Some(
                             inlines
                                 .iter()
                                 .map(|&inline| inline.try_into().unwrap())

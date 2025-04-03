@@ -94,7 +94,7 @@ impl TryFrom<Janet> for NorgBlock {
                 let heading: Option<Vec<NorgInline>> = value
                     .get(JanetKeyword::new(b"heading"))
                     .and_then(|inlines| match inlines.unwrap() {
-                        TaggedJanet::Array(inlines) => Some(
+                        TaggedJanet::Tuple(inlines) => Some(
                             inlines
                                 .iter()
                                 .map(|&inline| inline.try_into().unwrap())
@@ -107,7 +107,7 @@ impl TryFrom<Janet> for NorgBlock {
                     .ok_or(())?
                     .unwrap()
                 {
-                    TaggedJanet::Array(blocks) => blocks
+                    TaggedJanet::Tuple(blocks) => blocks
                         .iter()
                         .map(|&block| block.try_into().unwrap())
                         .collect(),
@@ -125,7 +125,7 @@ impl TryFrom<Janet> for NorgBlock {
                 inlines: value
                     .get(JanetKeyword::new(b"inlines"))
                     .and_then(|inlines| match inlines.unwrap() {
-                        TaggedJanet::Array(inlines) => Some(
+                        TaggedJanet::Tuple(inlines) => Some(
                             inlines
                                 .iter()
                                 .map(|&inline| inline.try_into().unwrap())
@@ -151,7 +151,7 @@ impl TryFrom<Janet> for NorgBlock {
                 let level = level as u16;
                 let items: Vec<ListItem> =
                     match value.get(JanetKeyword::new(b"items")).ok_or(())?.unwrap() {
-                        TaggedJanet::Array(items) => {
+                        TaggedJanet::Tuple(items) => {
                             items.iter().map(|&item| item.try_into().unwrap()).collect()
                         }
                         _ => vec![],
@@ -222,7 +222,7 @@ impl TryFrom<Janet> for ListItem {
             .ok_or(())?
             .unwrap()
         {
-            TaggedJanet::Array(blocks) => blocks
+            TaggedJanet::Tuple(blocks) => blocks
                 .iter()
                 .map(|&block| block.try_into().unwrap())
                 .collect(),
