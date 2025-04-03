@@ -215,7 +215,7 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
                     .unwrap()
                     .to_string();
                 let markup = node
-                    .child_by_field_name("description")
+                    .child_by_field_name("markup")
                     .map(|node| tsnode_to_inlines(node, text));
                 let attrs = get_attributes_from_tsnode(node, text).unwrap_or(vec![]);
                 Some(Link {
@@ -229,7 +229,7 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
                     .child_by_field_name("target")
                     .map(|node| node.utf8_text(text).unwrap().to_string());
                 let markup =
-                    tsnode_to_inlines(node.child_by_field_name("description").unwrap(), text);
+                    tsnode_to_inlines(node.child_by_field_name("markup").unwrap(), text);
                 let attrs = get_attributes_from_tsnode(node, text).unwrap_or(vec![]);
                 Some(Anchor {
                     target,

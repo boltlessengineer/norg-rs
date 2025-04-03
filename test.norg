@@ -23,7 +23,7 @@ print("hello world")
 
 \gh(nvim-neorg/norg-specs)
 
-{link}(html.class my-class)
+{link}[*my link*](html.class my-class)
 
 #(asdf)
 > (html.class todo) list item
