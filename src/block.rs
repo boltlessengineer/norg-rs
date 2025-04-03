@@ -1,32 +1,31 @@
 use janetrs::{Janet, JanetFunction, JanetKeyword, JanetStruct, TaggedJanet};
 
-use crate::inline::NorgInline;
+use crate::inline::{Attribute, NorgInline};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NorgBlock {
     Section {
-        // TODO: change this to Vec<String>
-        attrs: Option<String>,
+        attrs: Vec<Attribute>,
         level: u16,
         heading: Option<Vec<NorgInline>>,
         contents: Vec<Self>,
     },
     Paragraph {
-        attrs: Option<String>,
+        attrs: Vec<Attribute>,
         inlines: Vec<NorgInline>,
     },
     UnorderedList {
-        attrs: Option<String>,
+        attrs: Vec<Attribute>,
         level: u16,
         items: Vec<ListItem>,
     },
     OrderedList {
-        attrs: Option<String>,
+        attrs: Vec<Attribute>,
         level: u16,
         items: Vec<ListItem>,
     },
     Quote {
-        attrs: Option<String>,
+        attrs: Vec<Attribute>,
         level: u16,
         items: Vec<ListItem>,
     },
@@ -46,7 +45,7 @@ pub enum NorgBlock {
         content: Vec<String>,
     },
     Embed {
-        attrs: Option<String>,
+        attrs: Vec<Attribute>,
         // TODO: switch to HashMap<JanetKeyword, JanetFunction> instead
         // to check if "embed" support specific target language
         export: JanetFunction<'static>,
@@ -55,7 +54,7 @@ pub enum NorgBlock {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListItem {
-    pub params: Option<String>,
+    pub attrs: Vec<Attribute>,
     pub contents: Vec<NorgBlock>,
 }
 
@@ -65,7 +64,7 @@ impl TryFrom<Janet> for NorgBlock {
 
     fn try_from(value: Janet) -> Result<Self, Self::Error> {
         let TaggedJanet::Struct(value) = value.unwrap() else {
-            panic!("no struct");
+            return Err(());
         };
         let kind = value
             .get(JanetKeyword::new(b"kind"))
@@ -81,7 +80,7 @@ impl TryFrom<Janet> for NorgBlock {
                     return Err(());
                 };
                 NorgBlock::Embed {
-                    attrs: None,
+                    attrs: vec![],
                     export,
                 }
             }
@@ -114,14 +113,14 @@ impl TryFrom<Janet> for NorgBlock {
                     _ => vec![],
                 };
                 NorgBlock::Section {
-                    attrs: None,
+                    attrs: vec![],
                     level,
                     heading,
                     contents,
                 }
             }
             b"paragraph" => NorgBlock::Paragraph {
-                attrs: None,
+                attrs: todo!(),
                 inlines: value
                     .get(JanetKeyword::new(b"inlines"))
                     .and_then(|inlines| match inlines.unwrap() {
@@ -156,19 +155,20 @@ impl TryFrom<Janet> for NorgBlock {
                         }
                         _ => vec![],
                     };
+                let attrs = vec![];
                 match kind.as_bytes() {
                     b"unorderd-list" => Self::UnorderedList {
-                        attrs: None,
+                        attrs,
                         level,
                         items,
                     },
                     b"orderd-list" => Self::OrderedList {
-                        attrs: None,
+                        attrs,
                         level,
                         items,
                     },
                     b"quote-list" => Self::Quote {
-                        attrs: None,
+                        attrs,
                         level,
                         items,
                     },
@@ -187,10 +187,7 @@ impl Into<Janet> for ListItem {
             .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"list-item"))
             .put(
                 JanetKeyword::new(b"attrs"),
-                match self.params {
-                    Some(params) => Janet::string(params.as_bytes().into()),
-                    None => Janet::nil(),
-                },
+                Janet::tuple(self.attrs.into_iter().collect()),
             )
             .put(
                 JanetKeyword::new(b"contents"),
@@ -229,7 +226,7 @@ impl TryFrom<Janet> for ListItem {
             _ => vec![],
         };
         Ok(Self {
-            params: None,
+            attrs: todo!(),
             contents,
         })
     }
@@ -240,7 +237,7 @@ impl Into<Janet> for NorgBlock {
         use NorgBlock::*;
         match self {
             Section {
-                attrs: params,
+                attrs,
                 level,
                 heading,
                 contents,
@@ -248,10 +245,7 @@ impl Into<Janet> for NorgBlock {
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"section"))
                 .put(
                     JanetKeyword::new(b"attrs"),
-                    match params {
-                        Some(params) => Janet::string(params.as_bytes().into()),
-                        None => Janet::nil(),
-                    },
+                    Janet::tuple(attrs.into_iter().collect()),
                 )
                 .put(JanetKeyword::new(b"level"), level as usize)
                 .put(
@@ -267,14 +261,11 @@ impl Into<Janet> for NorgBlock {
                 )
                 .finalize()
                 .into(),
-            Paragraph { attrs: params, inlines } => JanetStruct::builder(3)
+            Paragraph { attrs, inlines } => JanetStruct::builder(3)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"paragraph"))
                 .put(
                     JanetKeyword::new(b"attrs"),
-                    match params {
-                        Some(params) => Janet::string(params.as_bytes().into()),
-                        None => Janet::nil(),
-                    },
+                    Janet::tuple(attrs.into_iter().collect()),
                 )
                 .put(
                     JanetKeyword::new(b"inlines"),
@@ -314,20 +305,17 @@ impl Into<Janet> for NorgBlock {
                 )
                 .finalize()
                 .into(),
-            Embed { attrs: params, export } => JanetStruct::builder(3)
+            Embed { attrs, export } => JanetStruct::builder(3)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"embed"))
                 .put(
                     JanetKeyword::new(b"attrs"),
-                    match params {
-                        Some(params) => Janet::string(params.as_bytes().into()),
-                        None => Janet::nil(),
-                    },
+                    Janet::tuple(attrs.into_iter().collect()),
                 )
                 .put(JanetKeyword::new(b"export"), export)
                 .finalize()
                 .into(),
             UnorderedList {
-                attrs: params,
+                attrs,
                 level,
                 items,
             } => JanetStruct::builder(4)
@@ -337,10 +325,7 @@ impl Into<Janet> for NorgBlock {
                 )
                 .put(
                     JanetKeyword::new(b"attrs"),
-                    match params {
-                        Some(params) => Janet::string(params.as_bytes().into()),
-                        None => Janet::nil(),
-                    },
+                    Janet::tuple(attrs.into_iter().collect()),
                 )
                 .put(JanetKeyword::new(b"level"), level as usize)
                 .put(
@@ -350,7 +335,7 @@ impl Into<Janet> for NorgBlock {
                 .finalize()
                 .into(),
             OrderedList {
-                attrs: params,
+                attrs,
                 level,
                 items,
             } => JanetStruct::builder(4)
@@ -360,10 +345,7 @@ impl Into<Janet> for NorgBlock {
                 )
                 .put(
                     JanetKeyword::new(b"attrs"),
-                    match params {
-                        Some(params) => Janet::string(params.as_bytes().into()),
-                        None => Janet::nil(),
-                    },
+                    Janet::tuple(attrs.into_iter().collect()),
                 )
                 .put(JanetKeyword::new(b"level"), level as usize)
                 .put(
@@ -373,7 +355,7 @@ impl Into<Janet> for NorgBlock {
                 .finalize()
                 .into(),
             Quote {
-                attrs: params,
+                attrs,
                 level,
                 items,
             } => JanetStruct::builder(4)
@@ -383,10 +365,7 @@ impl Into<Janet> for NorgBlock {
                 )
                 .put(
                     JanetKeyword::new(b"attrs"),
-                    match params {
-                        Some(params) => Janet::string(params.as_bytes().into()),
-                        None => Janet::nil(),
-                    },
+                    Janet::tuple(attrs.into_iter().collect()),
                 )
                 .put(JanetKeyword::new(b"level"), level as usize)
                 .put(

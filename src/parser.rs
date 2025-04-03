@@ -21,19 +21,25 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
         .map(|node| match node.kind() {
             "section" => {
                 let heading_node = node.child_by_field_name("heading").unwrap();
-                let prefix_node = heading_node.child(0).unwrap();
-                let prefix_count = prefix_node.utf8_text(text).unwrap().len();
-                let title_node = heading_node.child(1);
-                let title = title_node.map(|node| tsnode_to_inlines(node, text));
+                let prefix_count = heading_node
+                    .child(0)
+                    .expect("heading node should have at least one child")
+                    .utf8_text(text)
+                    .expect("heading prefix should be valid utf8 text")
+                    .len();
+                let title = heading_node
+                    .child_by_field_name("title")
+                    .map(|node| tsnode_to_inlines(node, text));
+                let attrs = get_attributes_from_tsnode(heading_node, text).unwrap_or(vec![]);
                 Some(NorgBlock::Section {
-                    attrs: None,
+                    attrs,
                     level: prefix_count as u16,
                     heading: title,
                     contents: tsnode_to_blocks(node, text),
                 })
             }
             "paragraph" => Some(NorgBlock::Paragraph {
-                attrs: None,
+                attrs: vec![],
                 inlines: tsnode_to_inlines(node, text),
             }),
             "infirm_tag" => {
@@ -91,13 +97,13 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                 let prefix_node = node.child(0).unwrap().child(0).unwrap();
                 let prefix_count = prefix_node.utf8_text(text).unwrap().len();
                 Some(NorgBlock::UnorderedList {
-                    attrs: None,
+                    attrs: vec![],
                     level: prefix_count as u16,
                     items: {
                         let mut cursor = node.walk();
                         node.named_children(&mut cursor)
                             .map(|node| ListItem {
-                                params: None,
+                                attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
                                 contents: tsnode_to_blocks(node, text),
                             })
                             .collect()
@@ -108,13 +114,13 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                 let prefix_node = node.child(0).unwrap().child(0).unwrap();
                 let prefix_count = prefix_node.utf8_text(text).unwrap().len();
                 Some(NorgBlock::OrderedList {
-                    attrs: None,
+                    attrs: vec![],
                     level: prefix_count as u16,
                     items: {
                         let mut cursor = node.walk();
                         node.named_children(&mut cursor)
                             .map(|node| ListItem {
-                                params: None,
+                                attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
                                 contents: tsnode_to_blocks(node, text),
                             })
                             .collect()
@@ -125,13 +131,13 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                 let prefix_node = node.child(0).unwrap().child(0).unwrap();
                 let prefix_count = prefix_node.utf8_text(text).unwrap().len();
                 Some(NorgBlock::Quote {
-                    attrs: None,
+                    attrs: vec![],
                     level: prefix_count as u16,
                     items: {
                         let mut cursor = node.walk();
                         node.named_children(&mut cursor)
                             .map(|node| ListItem {
-                                params: None,
+                                attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
                                 contents: tsnode_to_blocks(node, text),
                             })
                             .collect()
@@ -211,29 +217,7 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
                 let markup = node
                     .child_by_field_name("description")
                     .map(|node| tsnode_to_inlines(node, text));
-                let attrs = node
-                    .child_by_field_name("attributes")
-                    .map(|attrs_node| {
-                        let mut cursor = attrs_node.walk();
-                        attrs_node
-                            .named_children(&mut cursor)
-                            .map(|attr_node| {
-                                let key = attr_node
-                                    .child_by_field_name("key")
-                                    .map(|node| node.utf8_text(text).unwrap())
-                                    .unwrap();
-                                let val = attr_node
-                                    .child_by_field_name("value")
-                                    .map(|node| node.utf8_text(text).unwrap());
-                                if let Some(val) = val {
-                                    Attribute::KeyValue(key.to_string(), val.to_string())
-                                } else {
-                                    Attribute::Key(key.to_string())
-                                }
-                            })
-                            .collect()
-                    })
-                    .unwrap_or(vec![]);
+                let attrs = get_attributes_from_tsnode(node, text).unwrap_or(vec![]);
                 Some(Link {
                     target,
                     markup,
@@ -246,32 +230,7 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
                     .map(|node| node.utf8_text(text).unwrap().to_string());
                 let markup =
                     tsnode_to_inlines(node.child_by_field_name("description").unwrap(), text);
-                let attrs = node
-                    .child_by_field_name("attributes")
-                    .map(|attrs_node| {
-                        let mut cursor = attrs_node.walk();
-                        attrs_node
-                            .named_children(&mut cursor)
-                            .map(|attr_node| {
-                                let key = attr_node
-                                    .child_by_field_name("key")
-                                    .map(|node| node.utf8_text(text).unwrap())
-                                    .unwrap();
-                                let val = attr_node
-                                    .child_by_field_name("value")
-                                    .map(|node| node.utf8_text(text).unwrap());
-                                // let s = attr_node.utf8_text(text).unwrap();
-                                // let mut parts = s.splitn(2, char::is_whitespace);
-                                // let key = parts.next().unwrap();
-                                if let Some(val) = val {
-                                    Attribute::KeyValue(key.to_string(), val.to_string())
-                                } else {
-                                    Attribute::Key(key.to_string())
-                                }
-                            })
-                            .collect()
-                    })
-                    .unwrap_or(vec![]);
+                let attrs = get_attributes_from_tsnode(node, text).unwrap_or(vec![]);
                 Some(Anchor {
                     target,
                     markup,

@@ -50,7 +50,8 @@ Text -(rust)-> Vec<Block> -(janet)-> Other spec
 >>>>> Each files will load separate environment to separate in-file tag definitions.
 - ( ) api to resolve links
 - (x) embed `stdlib.janet` into rust
-- ( ) proper univeral rust type for attributes
+- (x) proper univeral rust type for attributes
 -- (x) change inlines
--- ( ) change blocks
+-- (x) change blocks
+- ( ) implement carryover tags & carryover attributes
 - ( ) package as rust crate

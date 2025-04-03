@@ -199,11 +199,15 @@
                     level (if (> level 6) 6 level)
                     contents (block :contents)]
                (string
-                "<section>\n"
+                "<section"
+                (html/create-attrs
+                  (filter-attrs :html (parse-attrs (block :attrs))))
+                ">\n"
                 ;(if heading
-                   ["<h" level ">"
-                     ;(map |(norg/export/inline :html $ ctx) heading)
-                     "</h" level ">\n"])
+                   ["<h" level
+                    ">"
+                    ;(map |(norg/export/inline :html $ ctx) heading)
+                    "</h" level ">\n"])
                  ;(map |(norg/export/block lang $ ctx) contents)
                  "</section>\n"))
      :paragraph (let [inlines (block :inlines)]
@@ -211,30 +215,38 @@
                    "<p>"
                    ;(map |(norg/export/inline :html $ ctx) inlines)
                    "</p>\n"))
-     :unordered-list (let [#params (string/split ";" (block :params))
-                           items (block :items)]
+     :unordered-list (let [items (block :items)]
                        (string
-                         "<ul>\n"
+                         "<ul"
+                         (html/create-attrs
+                            (filter-attrs :html (parse-attrs (block :attrs))))
+                         ">\n"
                          ;(map |(norg/export/block :html $ ctx) items)
                          "</ul>\n"))
-     :ordered-list (let [#params (string/split ";" (block :params))
-                         items (block :items)]
+     :ordered-list (let [items (block :items)]
                      (string
-                       "<ol>\n"
+                       "<ol"
+                       (html/create-attrs
+                         (filter-attrs :html (parse-attrs (block :attrs))))
+                       ">\n"
                        ;(map |(norg/export/block :html $ ctx) items)
                        "</ol>\n"))
-     :quote (let [#params (string/split ";" (block :params))
-                  items (block :items)]
+     :quote (let [items (block :items)]
              (string
-              "<blockquote>\n"
+              "<blockquote"
+              (html/create-attrs
+                (filter-attrs :html (parse-attrs (block :attrs))))
+              ">\n"
               ;(map |(string/join
                       (map |(norg/export/block :html $ ctx) ($ :contents)))
                     items)
               "</blockquote>\n"))
-     :list-item (let [#params (string/split ";" (block :params))
-                      contents (block :contents)]
+     :list-item (let [contents (block :contents)]
                  (string
-                   "<li>\n"
+                   "<li"
+                   (html/create-attrs
+                     (filter-attrs :html (parse-attrs (block :attrs))))
+                   ">\n"
                    ;(map |(norg/export/block :html $ ctx) contents)
                    "</li>\n"))
      "TODO_BLOCK\n"))
