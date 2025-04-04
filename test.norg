@@ -1,3 +1,20 @@
+@document.meta
+obj: {
+  nil:
+  number: 123e-3
+  string: string value
+  boolean: true
+  array: [
+    value
+    value
+  ]
+}
+
+arr: [
+  asdf
+  [adf]
+]
+@end
 * heading text
 *this ~is~ a paragraph*(html.class hi)
 \img(path/to/image.png)
@@ -10,11 +27,11 @@
 print("hello world")
 @end
 
-@eval asdf
+@eval
 # add custom tag while exporting document
 (put norg/ast/tag
      "\\gh"
-     (fn [[src] markup]
+     (fn [ctx [src] markup]
        [{:kind :link
          :target (string "https://github.com/" src)
          :markup [{:kind :text

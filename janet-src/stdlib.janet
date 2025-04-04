@@ -35,9 +35,53 @@
 #   [text]
 #   (error "todo"))
 
+(defn- handle-atom
+  [atom]
+  (def atom (string/trim atom))
+  (cond
+    (= atom "nil") :nil
+    (= atom "true") true
+    (= atom "false") false
+    (if-let [num (scan-number atom)]
+      num
+      atom)))
+(def- special "{}[]:\n")
+(def meta-peg
+  (peg/compile
+    ~{:main (* (any :property) -1)
+      :value (+ :array :object :atom)
+      :eol (+ "\r\n" "\r" "\n")
+      :space* (any (set " \t"))
+      :array (/ (* "["
+                   :s*
+                   (any (+ :value
+                           (* :eol :space*)))
+                   "]")
+                ,|[;$&])
+      :key (<- (some (if-not (set ,special) 1)))
+      :property (* :space*
+                   :key
+                   ":"
+                   :space*
+                   (+ :value
+                      (constant :nil))
+                   :s*)
+      :object (/ (* "{"
+                    :s*
+                    (any (+ :property
+                            (* :eol :space*)))
+                    "}")
+                 ,|(struct ;$&))
+      :atom (/ (<- (some (if-not (set ,special) 1)))
+               ,handle-atom)}))
+
+(defn norg/meta/parse
+  [text]
+  (struct ;(peg/match meta-peg text)))
+
 (defn- norg/tag/image
   ".image implementation"
-  [[src]]
+  [ctx [src]]
   [{:kind :embed
     :export {:gfm (fn [ctx]
                     (string
@@ -54,7 +98,7 @@
 
 (defn- norg/tag/code
   # TODO: find better way to pass "lines" parameter
-  [params lines]
+  [ctx params lines]
   [{:kind :embed
     :export {:gfm (fn [ctx]
                     # TODO: find if there is a line starting with three or more backticks
@@ -77,7 +121,7 @@
 (def message "message from neorg environment")
 
 (defn- norg/tag/eval
-  [params lines]
+  [ctx params lines]
   (defn chunk-string [lines]
     (def lines (reverse lines))
     (fn [buf _]
@@ -89,8 +133,15 @@
      :chunks (chunk-string lines)})
   [])
 
+(defn- norg/tag/document.meta
+  [ctx params lines]
+  (def text (string/join lines))
+  (def meta (norg/meta/parse text))
+  (put ctx :meta meta)
+  [])
+
 (defn- norg/inline-tag/img
-  [[src] markup]
+  [ctx [src] markup]
   [{:kind :embed
     :export {:html (fn [ctx]
                      (string
@@ -104,6 +155,7 @@
   @{"image" norg/tag/image
     "code" norg/tag/code
     "eval" norg/tag/eval
+    "document.meta" norg/tag/document.meta
     "\\img" norg/inline-tag/img})
 
 (def norg/export-hook
@@ -185,7 +237,7 @@
                                     markup []
                                     tag (norg/ast/tag (string "\\" name))]
                                 (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
-                                (def ast (tag params markup))
+                                (def ast (tag ctx params markup))
                                 (string/join (map |(norg/export/inline lang $ ctx) ast)))
     (case lang
       :html (norg/export/inline-html-impl)
@@ -261,21 +313,25 @@
                                         params (string/split ";" (block :params))
                                         tag (norg/ast/tag name)]
                                     (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
-                                    (def ast (tag params))
+                                    (def ast (tag ctx params))
                                     (string/join (map |(norg/export/block lang $ ctx) ast)))
     (= (block :kind) :ranged-tag) (let [name (block :name)
-                                        params (string/split ";" (block :params))
+                                        # HACK: stupid. should parse these from tree-sitter parser
+                                        params (block :params)
+                                        params (if params params "")
+                                        params (string/split ";" params)
                                         lines (block :content)
                                         tag (norg/ast/tag name)]
                                     (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
-                                    (def ast (tag params lines))
+                                    (def ast (tag ctx params lines))
                                     (string/join (map |(norg/export/block lang $ ctx) ast)))
     (case lang
       :html (norg/export/block-html-impl)
       (error "unkown language"))))
 
 (defn norg/export/doc
-  [lang ast & ctx]
-  (default ctx @{})
-  (string/join (map |(norg/export/block lang $ ctx)
-                    ast)))
+  [lang ast &opt ctx]
+  (default ctx @{:meta @{}})
+  (def res (string/join (map |(norg/export/block lang $ ctx)
+                           ast)))
+  [res ctx])
