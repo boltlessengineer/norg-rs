@@ -1,6 +1,9 @@
 #![allow(unused_variables)]
 
-use janetrs::{Janet, JanetKeyword, JanetString, JanetStruct, JanetTuple, TaggedJanet};
+use janetrs::{
+    Janet, JanetArray, JanetConversionError, JanetKeyword, JanetString, JanetStruct, JanetTuple,
+    JanetType, TaggedJanet,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Attribute {
@@ -8,16 +11,42 @@ pub enum Attribute {
     KeyValue(String, String),
 }
 
+impl TryFrom<JanetTuple<'_>> for Attribute {
+    type Error = JanetConversionError;
+    fn try_from(value: JanetTuple) -> Result<Self, Self::Error> {
+        todo!()
+    }
+}
+impl TryFrom<JanetArray<'_>> for Attribute {
+    type Error = JanetConversionError;
+    fn try_from(value: JanetArray) -> Result<Self, Self::Error> {
+        todo!()
+    }
+}
+impl TryFrom<Janet> for Attribute {
+    type Error = JanetConversionError;
+
+    fn try_from(value: Janet) -> Result<Self, Self::Error> {
+        match value.unwrap() {
+            TaggedJanet::Array(array) => array.try_into(),
+            TaggedJanet::Tuple(array) => array.try_into(),
+            got => {
+                return Err(JanetConversionError::multi_wrong_kind(
+                    vec![JanetType::Array, JanetType::Tuple],
+                    got.kind(),
+                ));
+            }
+        }
+    }
+}
+
 impl Into<JanetTuple<'_>> for Attribute {
     fn into(self) -> JanetTuple<'static> {
         match self {
-            Self::Key(key) => JanetTuple::builder(2)
-                .put(JanetString::from(key))
-                .finalize(),
-            Self::KeyValue(key, val) => JanetTuple::builder(2)
-                .put(JanetString::from(key))
-                .put(JanetString::from(val))
-                .finalize(),
+            Self::Key(key) => janetrs::tuple![JanetString::from(key)],
+            Self::KeyValue(key, val) => {
+                janetrs::tuple![JanetString::from(key), JanetString::from(val)]
+            }
         }
     }
 }
@@ -84,63 +113,65 @@ pub enum NorgInline {
 
 impl TryFrom<Janet> for NorgInline {
     // TODO: use actual error instead
-    type Error = ();
+    type Error = JanetConversionError;
 
     fn try_from(value: Janet) -> Result<Self, Self::Error> {
         let TaggedJanet::Struct(value) = value.unwrap() else {
             panic!("no struct");
         };
-        let kind = value
-            .get(JanetKeyword::new(b"kind"))
-            .and_then(|&kind| match kind.unwrap() {
-                TaggedJanet::Keyword(kind) => Some(kind),
-                _ => None,
-            })
-            .ok_or(())?;
+        let kind: JanetKeyword = value
+            .get_owned(JanetKeyword::new(b"kind"))
+            .ok_or(JanetConversionError::Other)?
+            .try_into()?;
         match kind.as_bytes() {
             b"whitespace" => Ok(NorgInline::Whitespace),
             b"softbreak" => Ok(NorgInline::SoftBreak),
             b"text" => Ok(NorgInline::Text(
                 value
-                    .get(JanetKeyword::new(b"text"))
-                    .and_then(|content| match content.unwrap() {
-                        TaggedJanet::String(content) => Some(content.to_string()),
-                        _ => None,
-                    })
-                    .ok_or(())?,
+                    .get_owned(JanetKeyword::new(b"text"))
+                    .ok_or(JanetConversionError::Other)?
+                    .try_unwrap::<JanetString>()?
+                    .to_string(),
             )),
             b"special" => Ok(NorgInline::Special(
                 value
-                    .get(JanetKeyword::new(b"special"))
-                    .and_then(|content| match content.unwrap() {
-                        TaggedJanet::String(content) => Some(content.to_string()),
-                        _ => None,
-                    })
-                    .ok_or(())?,
+                    .get_owned(JanetKeyword::new(b"text"))
+                    .ok_or(JanetConversionError::Other)?
+                    .try_unwrap::<JanetString>()?
+                    .to_string(),
             )),
             b"escape" => Ok(NorgInline::Escape(
                 value
-                    .get(JanetKeyword::new(b"escape"))
-                    .and_then(|content| match content.unwrap() {
-                        TaggedJanet::Number(number) => Some(char::from_u32(number as u32).unwrap()),
-                        _ => None,
-                    })
-                    .ok_or(())?,
+                    .get_owned(JanetKeyword::new(b"escape"))
+                    .ok_or(JanetConversionError::Other)?
+                    .try_unwrap::<u32>()?
+                    .try_into()
+                    .unwrap(),
             )),
             b"bold" | b"italic" | b"underline" | b"strikethrough" | b"verbatim" => {
                 let markup = value
                     .get(JanetKeyword::new(b"markup"))
-                    .and_then(|inlines| match inlines.unwrap() {
-                        TaggedJanet::Tuple(inlines) => Some(
-                            inlines
-                                .iter()
-                                .map(|&inline| inline.try_into().unwrap())
-                                .collect(),
-                        ),
-                        _ => None,
-                    })
-                    .ok_or(())?;
-                let attrs = todo!();
+                    .ok_or(JanetConversionError::Other)?;
+                let markup = match markup.unwrap() {
+                    TaggedJanet::Tuple(inlines) => inlines
+                        .iter()
+                        .map(|&inline| inline.try_into().unwrap())
+                        .collect(),
+                    TaggedJanet::Array(inlines) => inlines
+                        .iter()
+                        .map(|&inline| inline.try_into().unwrap())
+                        .collect(),
+                    got => {
+                        return Err(JanetConversionError::multi_wrong_kind(
+                            vec![JanetType::Array, JanetType::Tuple],
+                            got.kind(),
+                        ));
+                    }
+                };
+                let attrs = value
+                    .get(JanetKeyword::new(b"attrs"))
+                    .ok_or(JanetConversionError::Other)?;
+                let attrs = vec![];
                 match kind.as_bytes() {
                     b"bold" => Ok(NorgInline::Bold { markup, attrs }),
                     b"italic" => Ok(NorgInline::Italic { markup, attrs }),
@@ -152,12 +183,10 @@ impl TryFrom<Janet> for NorgInline {
             }
             b"macro" => Ok(NorgInline::Macro {
                 name: value
-                    .get(JanetKeyword::new(b"name"))
-                    .and_then(|name| match name.unwrap() {
-                        TaggedJanet::String(name) => Some(name.to_string()),
-                        _ => None,
-                    })
-                    .ok_or(())?,
+                    .get_owned(JanetKeyword::new(b"name"))
+                    .ok_or(JanetConversionError::Other)?
+                    .try_unwrap::<JanetString>()?
+                    .to_string(),
                 attrs: value
                     .get(JanetKeyword::new(b"attrs"))
                     .and_then(|attr| match attr.unwrap() {
@@ -172,8 +201,7 @@ impl TryFrom<Janet> for NorgInline {
                         ),
                         _ => None,
                     })
-                    .transpose()
-                    .or(Err(()))?,
+                    .transpose()?,
             }),
             b"link" | b"anchor" => {
                 let target =
@@ -194,22 +222,22 @@ impl TryFrom<Janet> for NorgInline {
                         _ => None,
                     }
                 });
-                let attrs = todo!();
+                let attrs = vec![];
                 match kind.as_bytes() {
                     b"link" => Ok(NorgInline::Link {
-                        target: target.ok_or(())?,
+                        target: target.ok_or(JanetConversionError::Other)?,
                         markup,
                         attrs,
                     }),
                     b"anchor" => Ok(NorgInline::Anchor {
                         target,
-                        markup: markup.ok_or(())?,
+                        markup: markup.ok_or(JanetConversionError::Other)?,
                         attrs,
                     }),
                     _ => unreachable!(),
                 }
             }
-            _ => Err(()),
+            _ => todo!("error here"),
         }
     }
 }

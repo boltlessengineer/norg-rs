@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use janetrs::{Janet, TaggedJanet};
+use janetrs::{Janet, JanetConversionError, JanetString, TaggedJanet};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -13,7 +13,7 @@ pub enum NorgMeta {
     Object(BTreeMap<String, NorgMeta>),
 }
 
-pub(crate) fn janetkv_to_metaobj(kv: impl IntoIterator<Item = (Janet, Janet)>) -> Result<BTreeMap<String, NorgMeta>, ()> {
+pub(crate) fn janetkv_to_metaobj(kv: impl IntoIterator<Item = (Janet, Janet)>) -> Result<BTreeMap<String, NorgMeta>, JanetConversionError> {
     let mut obj = BTreeMap::new();
     for (key, value) in kv.into_iter() {
         let key = match key.unwrap() {
@@ -28,7 +28,7 @@ pub(crate) fn janetkv_to_metaobj(kv: impl IntoIterator<Item = (Janet, Janet)>) -
 }
 
 impl TryFrom<Janet> for NorgMeta {
-    type Error = ();
+    type Error = JanetConversionError;
 
     fn try_from(value: Janet) -> Result<Self, Self::Error> {
         match value.unwrap() {
@@ -41,11 +41,9 @@ impl TryFrom<Janet> for NorgMeta {
             TaggedJanet::Struct(janet_struct) => {
                 let mut obj = BTreeMap::new();
                 for (key, &value) in janet_struct.iter() {
-                    let TaggedJanet::String(key) = key.unwrap() else {
-                        todo!("type error");
-                    };
+                    let key = key.try_unwrap::<JanetString>()?.to_string();
                     let value: NorgMeta = value.try_into()?;
-                    obj.insert(key.to_string(), value);
+                    obj.insert(key, value);
                 }
                 Ok(Self::Object(obj))
             }

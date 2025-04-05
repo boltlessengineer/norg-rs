@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use janetrs::{client::JanetClient, env::{DefOptions, JanetEnvironment}, Janet};
+use janetrs::{client::JanetClient, env::{DefOptions, JanetEnvironment}, Janet, JanetConversionError};
 use meta::NorgMeta;
 use serde::Serialize;
 
@@ -35,7 +35,7 @@ pub struct ExportCtx {
 }
 
 impl TryFrom<janetrs::JanetTable<'_>> for ExportCtx {
-    type Error = ();
+    type Error = JanetConversionError;
 
     fn try_from(value: janetrs::JanetTable) -> Result<Self, Self::Error> {
         let meta_value = value.get_owned(janetrs::JanetKeyword::new(b"meta"));
@@ -43,9 +43,14 @@ impl TryFrom<janetrs::JanetTable<'_>> for ExportCtx {
             return Ok(Self { meta: Default::default() });
         };
         let meta = match meta_value.unwrap() {
-            janetrs::TaggedJanet::Table(meta_table) => meta::janetkv_to_metaobj(meta_table)?,
-            janetrs::TaggedJanet::Struct(meta_struct) => meta::janetkv_to_metaobj(meta_struct)?,
-            _ => todo!("error: not table/struct"),
+            janetrs::TaggedJanet::Table(meta_table) => crate::meta::janetkv_to_metaobj(meta_table)?,
+            janetrs::TaggedJanet::Struct(meta_struct) => crate::meta::janetkv_to_metaobj(meta_struct)?,
+            got => {
+                return Err(JanetConversionError::multi_wrong_kind(vec![
+                    janetrs::JanetType::Table,
+                    janetrs::JanetType::Struct,
+                ], got.kind()));
+            }
         };
         Ok(Self { meta })
     }
@@ -71,6 +76,5 @@ pub fn export(target: ExportTarget, ast: Vec<crate::block::NorgBlock>) -> Result
     };
     let res = res.try_unwrap::<janetrs::JanetString>().or(Err(()))?.to_string();
     let ctx = ctx.try_unwrap::<janetrs::JanetTable>().map(ExportCtx::try_from).or(Err(()))?;
-    // TODO: convert ctx to ExportCtx
     Ok((res, ctx.unwrap()))
 }

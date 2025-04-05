@@ -1,4 +1,7 @@
-use janetrs::{Janet, JanetFunction, JanetKeyword, JanetStruct, TaggedJanet};
+use janetrs::{
+    Janet, JanetConversionError, JanetFunction, JanetKeyword, JanetString, JanetStruct, JanetType,
+    TaggedJanet,
+};
 
 use crate::inline::{Attribute, NorgInline};
 
@@ -59,51 +62,46 @@ pub struct ListItem {
 }
 
 impl TryFrom<Janet> for NorgBlock {
-    // TODO: use actual error instead
-    type Error = ();
+    // TODO: change JanetConversionError::Other to more verbose one
+    type Error = JanetConversionError;
 
     fn try_from(value: Janet) -> Result<Self, Self::Error> {
-        let TaggedJanet::Struct(value) = value.unwrap() else {
-            return Err(());
-        };
-        let kind = value
-            .get(JanetKeyword::new(b"kind"))
-            .and_then(|&kind| match kind.unwrap() {
-                TaggedJanet::Keyword(kind) => Some(kind),
-                _ => None,
-            })
-            .ok_or(())?;
+        let value = JanetStruct::try_from(value)?;
+        let kind: JanetKeyword = value
+            .get_owned(JanetKeyword::new(b"kind"))
+            .ok_or(JanetConversionError::Other)?
+            .try_into()?;
         let node = match kind.as_bytes() {
-            b"embed" => {
-                let export = value.get_owned(Janet::keyword("export".into())).unwrap();
-                let TaggedJanet::Function(export) = export.unwrap() else {
-                    return Err(());
-                };
-                NorgBlock::Embed {
-                    attrs: vec![],
-                    export,
-                }
-            }
+            b"embed" => NorgBlock::Embed {
+                attrs: vec![],
+                export: value
+                    .get_owned(JanetKeyword::new(b"export"))
+                    .ok_or(JanetConversionError::Other)?
+                    .try_into()?,
+            },
             b"section" => {
-                let level = value.get_owned(JanetKeyword::new(b"level")).unwrap();
-                let TaggedJanet::Number(level) = level.unwrap() else {
-                    return Err(());
-                };
-                let level = level as u16;
-                let heading: Option<Vec<NorgInline>> = value
+                let level = value
+                    .get_owned(JanetKeyword::new(b"level"))
+                    .ok_or(JanetConversionError::Other)?
+                    .try_unwrap::<u32>()? as u16;
+                let heading = value
                     .get(JanetKeyword::new(b"heading"))
-                    .and_then(|inlines| match inlines.unwrap() {
-                        TaggedJanet::Tuple(inlines) => Some(
-                            inlines
-                                .iter()
-                                .map(|&inline| inline.try_into().unwrap())
-                                .collect(),
-                        ),
-                        _ => None,
-                    });
+                    .map(|inlines| match inlines.unwrap() {
+                        TaggedJanet::Tuple(tuple) => {
+                            tuple.iter().map(|&inline| inline.try_into()).collect()
+                        }
+                        TaggedJanet::Array(array) => {
+                            array.iter().map(|&inline| inline.try_into()).collect()
+                        }
+                        got => Err(JanetConversionError::multi_wrong_kind(
+                            vec![JanetType::Array, JanetType::Tuple],
+                            got.kind(),
+                        )),
+                    })
+                    .transpose()?;
                 let contents: Vec<NorgBlock> = match value
                     .get(JanetKeyword::new(b"contents"))
-                    .ok_or(())?
+                    .ok_or(JanetConversionError::Other)?
                     .unwrap()
                 {
                     TaggedJanet::Tuple(blocks) => blocks
@@ -120,42 +118,59 @@ impl TryFrom<Janet> for NorgBlock {
                 }
             }
             b"paragraph" => NorgBlock::Paragraph {
-                attrs: todo!(),
-                inlines: value
-                    .get(JanetKeyword::new(b"inlines"))
-                    .and_then(|inlines| match inlines.unwrap() {
-                        TaggedJanet::Tuple(inlines) => Some(
-                            inlines
-                                .iter()
-                                .map(|&inline| inline.try_into().unwrap())
-                                .collect(),
-                        ),
-                        _ => None,
-                    })
-                    .ok_or(())?,
+                attrs: vec![],
+                inlines: {
+                    let inlines = value
+                        .get_owned(JanetKeyword::new(b"inlines"))
+                        .ok_or(JanetConversionError::Other)?;
+                    match inlines.unwrap() {
+                        TaggedJanet::Tuple(tuple) => tuple
+                            .into_iter()
+                            .map(|inline: Janet| inline.try_into().unwrap())
+                            .collect(),
+                        TaggedJanet::Array(array) => array
+                            .into_iter()
+                            .map(|inline: Janet| inline.try_into().unwrap())
+                            .collect(),
+                        got => {
+                            return Err(JanetConversionError::multi_wrong_kind(
+                                vec![JanetType::Array, JanetType::Tuple],
+                                got.kind(),
+                            ));
+                        }
+                    }
+                },
             },
             b"infirm-tag" => {
-                let name = value.get_owned(JanetKeyword::new(b"name")).unwrap();
-                let TaggedJanet::String(name) = name.unwrap() else {
-                    return Err(());
-                };
-                let name = name.to_string();
+                let name = value
+                    .get_owned(JanetKeyword::new(b"name"))
+                    .ok_or(JanetConversionError::Other)?;
+                let name = JanetString::try_from(name)?.to_string();
                 NorgBlock::InfirmTag { params: None, name }
             }
             b"unordered-list" | b"ordered-list" | b"quote" => {
-                let level = value.get_owned(JanetKeyword::new(b"level")).unwrap();
-                let TaggedJanet::Number(level) = level.unwrap() else {
-                    return Err(());
-                };
-                let level = level as u16;
-                let items: Vec<ListItem> =
-                    match value.get(JanetKeyword::new(b"items")).ok_or(())?.unwrap() {
-                        TaggedJanet::Tuple(items) => {
-                            items.iter().map(|&item| item.try_into().unwrap()).collect()
-                        }
-                        _ => vec![],
-                    };
                 let attrs = vec![];
+                let level = value
+                    .get_owned(JanetKeyword::new(b"level"))
+                    .ok_or(JanetConversionError::Other)?
+                    .try_unwrap::<u32>()? as u16;
+                let items = value
+                    .get(JanetKeyword::new(b"items"))
+                    .ok_or(JanetConversionError::Other)?;
+                let items: Vec<ListItem> = match items.unwrap() {
+                    TaggedJanet::Tuple(items) => {
+                        items.iter().map(|&item| item.try_into().unwrap()).collect()
+                    }
+                    TaggedJanet::Array(items) => {
+                        items.iter().map(|&item| item.try_into().unwrap()).collect()
+                    }
+                    got => {
+                        return Err(JanetConversionError::multi_wrong_kind(
+                            vec![JanetType::Array, JanetType::Tuple],
+                            got.kind(),
+                        ));
+                    }
+                };
                 match kind.as_bytes() {
                     b"unorderd-list" => Self::UnorderedList {
                         attrs,
@@ -199,34 +214,40 @@ impl Into<Janet> for ListItem {
 }
 
 impl TryFrom<Janet> for ListItem {
-    // TODO: use actual error instead
-    type Error = ();
+    type Error = JanetConversionError;
 
     fn try_from(value: Janet) -> Result<Self, Self::Error> {
-        let value: JanetStruct = value.try_unwrap().or(Err(()))?;
-        let kind = value
-            .get(JanetKeyword::new(b"kind"))
-            .and_then(|&kind| match kind.unwrap() {
-                TaggedJanet::Keyword(kind) => Some(kind),
-                _ => None,
-            })
-            .ok_or(())?;
+        let value: JanetStruct = value.try_into()?;
+        let kind: JanetKeyword = value
+            .get_owned(JanetKeyword::new(b"kind"))
+            .ok_or(JanetConversionError::Other)?
+            .try_into()?;
         if kind != JanetKeyword::new(b"list-item") {
-            return Err(());
+            return Err(JanetConversionError::Other);
         }
         let contents: Vec<NorgBlock> = match value
             .get(JanetKeyword::new(b"contents"))
-            .ok_or(())?
+            .ok_or(JanetConversionError::Other)?
             .unwrap()
         {
             TaggedJanet::Tuple(blocks) => blocks
                 .iter()
                 .map(|&block| block.try_into().unwrap())
                 .collect(),
-            _ => vec![],
+            TaggedJanet::Array(blocks) => blocks
+                .iter()
+                .map(|&block| block.try_into().unwrap())
+                .collect(),
+            got => {
+                return Err(JanetConversionError::multi_wrong_kind(
+                    vec![JanetType::Array, JanetType::Tuple],
+                    got.kind(),
+                ));
+            }
         };
         Ok(Self {
-            attrs: todo!(),
+            // TODO: parse attrs
+            attrs: vec![],
             contents,
         })
     }
@@ -359,10 +380,7 @@ impl Into<Janet> for NorgBlock {
                 level,
                 items,
             } => JanetStruct::builder(4)
-                .put(
-                    JanetKeyword::new(b"kind"),
-                    JanetKeyword::new(b"quote"),
-                )
+                .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"quote"))
                 .put(
                     JanetKeyword::new(b"attrs"),
                     Janet::tuple(attrs.into_iter().collect()),
