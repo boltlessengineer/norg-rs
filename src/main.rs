@@ -6,7 +6,8 @@ fn main() {
     println!("{}", String::from_utf8_lossy(&text));
 
     println!("exported to:");
-    let (res, ctx) = norg_rs::export(norg_rs::ExportTarget::Html, ast).unwrap();
+    let mut exporter = norg_rs::export::Exporter::new();
+    let (res, ctx) = exporter.export(norg_rs::export::ExportTarget::Html, ast).unwrap();
     println!("{}", res);
     println!("{:#?}", ctx);
 }
