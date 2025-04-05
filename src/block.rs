@@ -393,7 +393,11 @@ impl Into<Janet> for NorgBlock {
                 )
                 .finalize()
                 .into(),
-            CarryoverTag { params, name, target } => JanetStruct::builder(4)
+            CarryoverTag {
+                params,
+                name,
+                target,
+            } => JanetStruct::builder(4)
                 .put(
                     JanetKeyword::new(b"kind"),
                     JanetKeyword::new(b"carryover-tag"),

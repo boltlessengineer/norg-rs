@@ -19,7 +19,7 @@ impl TryFrom<Janet> for JanetIterable<'_> {
             got => Err(JanetConversionError::multi_wrong_kind(
                 vec![JanetType::Array, JanetType::Tuple],
                 got.kind(),
-            ))
+            )),
         }
     }
 }

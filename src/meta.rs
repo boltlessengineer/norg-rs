@@ -13,7 +13,9 @@ pub enum NorgMeta {
     Object(BTreeMap<String, NorgMeta>),
 }
 
-pub(crate) fn janetkv_to_metaobj(kv: impl IntoIterator<Item = (Janet, Janet)>) -> Result<BTreeMap<String, NorgMeta>, JanetConversionError> {
+pub(crate) fn janetkv_to_metaobj(
+    kv: impl IntoIterator<Item = (Janet, Janet)>,
+) -> Result<BTreeMap<String, NorgMeta>, JanetConversionError> {
     let mut obj = BTreeMap::new();
     for (key, value) in kv.into_iter() {
         let key = match key.unwrap() {
@@ -64,7 +66,7 @@ impl TryFrom<Janet> for NorgMeta {
                     arr.push(value.try_into()?);
                 }
                 Ok(Self::Array(arr))
-            },
+            }
             _ => todo!("error here"),
         }
     }

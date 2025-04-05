@@ -7,7 +7,9 @@ fn main() {
 
     println!("exported to:");
     let mut exporter = norg_rs::export::Exporter::new();
-    let (res, ctx) = exporter.export(norg_rs::export::ExportTarget::Html, ast).unwrap();
+    let (res, ctx) = exporter
+        .export(norg_rs::export::ExportTarget::Html, ast)
+        .unwrap();
     println!("{}", res);
     println!("{:#?}", ctx);
 }

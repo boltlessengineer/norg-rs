@@ -27,146 +27,145 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
     node.named_children(&mut cursor)
         .flat_map(|node| {
             let block = match node.kind() {
-            "section" => {
-                let heading_node = node.child_by_field_name("heading").unwrap();
-                let prefix_count = heading_node
-                    .child(0)
-                    .expect("heading node should have at least one child")
-                    .utf8_text(text)
-                    .expect("heading prefix should be valid utf8 text")
-                    .len();
-                let title = heading_node
-                    .child_by_field_name("title")
-                    .map(|node| tsnode_to_inlines(node, text));
-                let attrs = get_attributes_from_tsnode(heading_node, text).unwrap_or(vec![]);
-                Some(NorgBlock::Section {
-                    attrs,
-                    level: prefix_count as u16,
-                    heading: title,
-                    contents: tsnode_to_blocks(node, text),
-                })
-            }
-            "paragraph" => Some(NorgBlock::Paragraph {
-                attrs: std::mem::take(&mut carryovers.attrs),
-                inlines: tsnode_to_inlines(node, text),
-            }),
-            "infirm_tag" => {
-                let name = node
-                    .child_by_field_name("name")
-                    .unwrap()
-                    .utf8_text(text)
-                    .unwrap()
-                    .to_string();
-                let raw_param = node
-                    .child_by_field_name("param")
-                    .map(|node| node.utf8_text(text).unwrap().to_string());
-                Some(NorgBlock::InfirmTag {
-                    name,
-                    params: raw_param,
-                })
-            }
-            "ranged_tag" => {
-                let name = node
-                    .child_by_field_name("name")
-                    .unwrap()
-                    .utf8_text(text)
-                    .unwrap()
-                    .to_string();
-                let raw_param = node
-                    .child_by_field_name("param")
-                    .map(|node| node.utf8_text(text).unwrap().to_string());
-                let mut cursor = node.walk();
-                let lines = node
-                    .children_by_field_name("line", &mut cursor)
-                    .map(|node| node.utf8_text(text).unwrap().to_string())
-                    .collect();
-                Some(NorgBlock::RangedTag {
-                    name,
-                    params: raw_param,
-                    content: lines,
-                })
-            }
-            "carryover_attributes" => {
-                let attrs = get_attributes_from_tsnode(node, text).unwrap();
-                carryovers.attrs.extend(attrs);
-                None
-            }
-            "carryover_tag" => {
-                let name = node
-                    .child_by_field_name("name")
-                    .unwrap()
-                    .utf8_text(text)
-                    .unwrap()
-                    .to_string();
-                let raw_param = node
-                    .child_by_field_name("param")
-                    .map(|node| node.utf8_text(text).unwrap().to_string());
-                carryovers.tags.push((name, raw_param));
-                None
-            }
-            "unordered_list" => {
-                let prefix_node = node.child(0).unwrap().child(0).unwrap();
-                let prefix_count = prefix_node.utf8_text(text).unwrap().len();
-                Some(NorgBlock::UnorderedList {
-                    attrs: vec![],
-                    level: prefix_count as u16,
-                    items: {
-                        let mut cursor = node.walk();
-                        node.named_children(&mut cursor)
-                            .map(|node| ListItem {
-                                attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                                contents: tsnode_to_blocks(node, text),
-                            })
-                            .collect()
-                    },
-                })
-            }
-            "ordered_list" => {
-                let prefix_node = node.child(0).unwrap().child(0).unwrap();
-                let prefix_count = prefix_node.utf8_text(text).unwrap().len();
-                Some(NorgBlock::OrderedList {
-                    attrs: vec![],
-                    level: prefix_count as u16,
-                    items: {
-                        let mut cursor = node.walk();
-                        node.named_children(&mut cursor)
-                            .map(|node| ListItem {
-                                attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                                contents: tsnode_to_blocks(node, text),
-                            })
-                            .collect()
-                    },
-                })
-            }
-            "quote" => {
-                let prefix_node = node.child(0).unwrap().child(0).unwrap();
-                let prefix_count = prefix_node.utf8_text(text).unwrap().len();
-                Some(NorgBlock::Quote {
-                    attrs: vec![],
-                    level: prefix_count as u16,
-                    items: {
-                        let mut cursor = node.walk();
-                        node.named_children(&mut cursor)
-                            .map(|node| ListItem {
-                                attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                                contents: tsnode_to_blocks(node, text),
-                            })
-                            .collect()
-                    },
-                })
-            }
-            _ => None,
+                "section" => {
+                    let heading_node = node.child_by_field_name("heading").unwrap();
+                    let prefix_count = heading_node
+                        .child(0)
+                        .expect("heading node should have at least one child")
+                        .utf8_text(text)
+                        .expect("heading prefix should be valid utf8 text")
+                        .len();
+                    let title = heading_node
+                        .child_by_field_name("title")
+                        .map(|node| tsnode_to_inlines(node, text));
+                    let attrs = get_attributes_from_tsnode(heading_node, text).unwrap_or(vec![]);
+                    Some(NorgBlock::Section {
+                        attrs,
+                        level: prefix_count as u16,
+                        heading: title,
+                        contents: tsnode_to_blocks(node, text),
+                    })
+                }
+                "paragraph" => Some(NorgBlock::Paragraph {
+                    attrs: std::mem::take(&mut carryovers.attrs),
+                    inlines: tsnode_to_inlines(node, text),
+                }),
+                "infirm_tag" => {
+                    let name = node
+                        .child_by_field_name("name")
+                        .unwrap()
+                        .utf8_text(text)
+                        .unwrap()
+                        .to_string();
+                    let raw_param = node
+                        .child_by_field_name("param")
+                        .map(|node| node.utf8_text(text).unwrap().to_string());
+                    Some(NorgBlock::InfirmTag {
+                        name,
+                        params: raw_param,
+                    })
+                }
+                "ranged_tag" => {
+                    let name = node
+                        .child_by_field_name("name")
+                        .unwrap()
+                        .utf8_text(text)
+                        .unwrap()
+                        .to_string();
+                    let raw_param = node
+                        .child_by_field_name("param")
+                        .map(|node| node.utf8_text(text).unwrap().to_string());
+                    let mut cursor = node.walk();
+                    let lines = node
+                        .children_by_field_name("line", &mut cursor)
+                        .map(|node| node.utf8_text(text).unwrap().to_string())
+                        .collect();
+                    Some(NorgBlock::RangedTag {
+                        name,
+                        params: raw_param,
+                        content: lines,
+                    })
+                }
+                "carryover_attributes" => {
+                    let attrs = get_attributes_from_tsnode(node, text).unwrap();
+                    carryovers.attrs.extend(attrs);
+                    None
+                }
+                "carryover_tag" => {
+                    let name = node
+                        .child_by_field_name("name")
+                        .unwrap()
+                        .utf8_text(text)
+                        .unwrap()
+                        .to_string();
+                    let raw_param = node
+                        .child_by_field_name("param")
+                        .map(|node| node.utf8_text(text).unwrap().to_string());
+                    carryovers.tags.push((name, raw_param));
+                    None
+                }
+                "unordered_list" => {
+                    let prefix_node = node.child(0).unwrap().child(0).unwrap();
+                    let prefix_count = prefix_node.utf8_text(text).unwrap().len();
+                    Some(NorgBlock::UnorderedList {
+                        attrs: vec![],
+                        level: prefix_count as u16,
+                        items: {
+                            let mut cursor = node.walk();
+                            node.named_children(&mut cursor)
+                                .map(|node| ListItem {
+                                    attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
+                                    contents: tsnode_to_blocks(node, text),
+                                })
+                                .collect()
+                        },
+                    })
+                }
+                "ordered_list" => {
+                    let prefix_node = node.child(0).unwrap().child(0).unwrap();
+                    let prefix_count = prefix_node.utf8_text(text).unwrap().len();
+                    Some(NorgBlock::OrderedList {
+                        attrs: vec![],
+                        level: prefix_count as u16,
+                        items: {
+                            let mut cursor = node.walk();
+                            node.named_children(&mut cursor)
+                                .map(|node| ListItem {
+                                    attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
+                                    contents: tsnode_to_blocks(node, text),
+                                })
+                                .collect()
+                        },
+                    })
+                }
+                "quote" => {
+                    let prefix_node = node.child(0).unwrap().child(0).unwrap();
+                    let prefix_count = prefix_node.utf8_text(text).unwrap().len();
+                    Some(NorgBlock::Quote {
+                        attrs: vec![],
+                        level: prefix_count as u16,
+                        items: {
+                            let mut cursor = node.walk();
+                            node.named_children(&mut cursor)
+                                .map(|node| ListItem {
+                                    attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
+                                    contents: tsnode_to_blocks(node, text),
+                                })
+                                .collect()
+                        },
+                    })
+                }
+                _ => None,
             };
             block.map(|block| {
                 if carryovers.tags.len() > 0 {
                     let tags = std::mem::take(&mut carryovers.tags);
-                    tags.into_iter().fold(block, |block, (name, params)| {
-                        NorgBlock::CarryoverTag {
+                    tags.into_iter()
+                        .fold(block, |block, (name, params)| NorgBlock::CarryoverTag {
                             name,
                             params,
                             target: Box::new(block),
-                        }
-                    })
+                        })
                 } else {
                     block
                 }
@@ -253,8 +252,7 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
                 let target = node
                     .child_by_field_name("target")
                     .map(|node| node.utf8_text(text).unwrap().to_string());
-                let markup =
-                    tsnode_to_inlines(node.child_by_field_name("markup").unwrap(), text);
+                let markup = tsnode_to_inlines(node.child_by_field_name("markup").unwrap(), text);
                 let attrs = get_attributes_from_tsnode(node, text).unwrap_or(vec![]);
                 Some(Anchor {
                     target,
@@ -269,29 +267,27 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
 }
 
 fn get_attributes_from_tsnode(node: tree_sitter::Node, text: &[u8]) -> Option<Vec<Attribute>> {
-    node
-        .child_by_field_name("attributes")
-        .map(|attrs_node| {
-            let mut cursor = attrs_node.walk();
-            attrs_node
-                .named_children(&mut cursor)
-                .map(|attr_node| {
-                    let key = attr_node
-                        .child_by_field_name("key")
-                        .map(|node| node.utf8_text(text).unwrap())
-                        .unwrap();
-                    let val = attr_node
-                        .child_by_field_name("value")
-                        .map(|node| node.utf8_text(text).unwrap());
-                    // let s = attr_node.utf8_text(text).unwrap();
-                    // let mut parts = s.splitn(2, char::is_whitespace);
-                    // let key = parts.next().unwrap();
-                    if let Some(val) = val {
-                        Attribute::KeyValue(key.to_string(), val.to_string())
-                    } else {
-                        Attribute::Key(key.to_string())
-                    }
-                })
-                .collect()
-        })
+    node.child_by_field_name("attributes").map(|attrs_node| {
+        let mut cursor = attrs_node.walk();
+        attrs_node
+            .named_children(&mut cursor)
+            .map(|attr_node| {
+                let key = attr_node
+                    .child_by_field_name("key")
+                    .map(|node| node.utf8_text(text).unwrap())
+                    .unwrap();
+                let val = attr_node
+                    .child_by_field_name("value")
+                    .map(|node| node.utf8_text(text).unwrap());
+                // let s = attr_node.utf8_text(text).unwrap();
+                // let mut parts = s.splitn(2, char::is_whitespace);
+                // let key = parts.next().unwrap();
+                if let Some(val) = val {
+                    Attribute::KeyValue(key.to_string(), val.to_string())
+                } else {
+                    Attribute::Key(key.to_string())
+                }
+            })
+            .collect()
+    })
 }

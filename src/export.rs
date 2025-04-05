@@ -1,6 +1,10 @@
 use std::collections::BTreeMap;
 
-use janetrs::{client::JanetClient, env::{DefOptions, JanetEnvironment}, Janet, JanetConversionError};
+use janetrs::{
+    client::JanetClient,
+    env::{DefOptions, JanetEnvironment},
+    Janet, JanetConversionError,
+};
 use serde::Serialize;
 
 use crate::meta::NorgMeta;
@@ -36,16 +40,20 @@ impl TryFrom<janetrs::JanetTable<'_>> for ExportCtx {
     fn try_from(value: janetrs::JanetTable) -> Result<Self, Self::Error> {
         let meta_value = value.get_owned(janetrs::JanetKeyword::new(b"meta"));
         let Some(meta_value) = meta_value else {
-            return Ok(Self { meta: Default::default() });
+            return Ok(Self {
+                meta: Default::default(),
+            });
         };
         let meta = match meta_value.unwrap() {
             janetrs::TaggedJanet::Table(meta_table) => crate::meta::janetkv_to_metaobj(meta_table)?,
-            janetrs::TaggedJanet::Struct(meta_struct) => crate::meta::janetkv_to_metaobj(meta_struct)?,
+            janetrs::TaggedJanet::Struct(meta_struct) => {
+                crate::meta::janetkv_to_metaobj(meta_struct)?
+            }
             got => {
-                return Err(JanetConversionError::multi_wrong_kind(vec![
-                    janetrs::JanetType::Table,
-                    janetrs::JanetType::Struct,
-                ], got.kind()));
+                return Err(JanetConversionError::multi_wrong_kind(
+                    vec![janetrs::JanetType::Table, janetrs::JanetType::Struct],
+                    got.kind(),
+                ));
             }
         };
         Ok(Self { meta })
@@ -87,15 +95,22 @@ impl Exporter {
         self.janet_client.run(code.as_ref())
     }
 
-    pub fn export(&mut self, target: ExportTarget, ast: Vec<crate::block::NorgBlock>) -> Result<(String, ExportCtx), ExportError> {
+    pub fn export(
+        &mut self,
+        target: ExportTarget,
+        ast: Vec<crate::block::NorgBlock>,
+    ) -> Result<(String, ExportCtx), ExportError> {
         self.janet_client.add_def(DefOptions::new(
             "ast",
             Janet::tuple(ast.into_iter().collect()),
         ));
-        self.janet_client.add_def(DefOptions::new("lang", Janet::keyword(target.into())));
-        let res = self.janet_client.run(r#"
+        self.janet_client
+            .add_def(DefOptions::new("lang", Janet::keyword(target.into())));
+        let res = self.janet_client.run(
+            r#"
             (norg/export/doc lang ast)
-        "#)?;
+        "#,
+        )?;
         let janetrs::TaggedJanet::Tuple(tuple) = res.unwrap() else {
             todo!("no tuple error");
         };
