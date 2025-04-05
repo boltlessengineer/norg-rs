@@ -54,6 +54,9 @@ pub enum NorgBlock {
         // to check if "embed" support specific target language
         export: JanetFunction<'static>,
     },
+    HorizontalLine {
+        attrs: Vec<Attribute>,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -411,6 +414,14 @@ impl Into<Janet> for NorgBlock {
                 )
                 .put(JanetKeyword::new(b"name"), name.as_str())
                 .put(JanetKeyword::new(b"block"), *target)
+                .finalize()
+                .into(),
+            HorizontalLine { attrs } => JanetStruct::builder(2)
+                .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"horizontal-line"))
+                .put(
+                    JanetKeyword::new(b"attrs"),
+                    Janet::tuple(attrs.into_iter().collect()),
+                )
                 .finalize()
                 .into(),
         }

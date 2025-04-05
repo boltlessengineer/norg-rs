@@ -53,6 +53,6 @@ Text -(rust)-> Vec<Block> -(janet)-> Other spec
 - (x) proper univeral rust type for attributes
 -- (x) change inlines
 -- (x) change blocks
-- ( ) implement carryover tags & carryover attributes
+- (x) implement carryover tags & carryover attributes
 - (x) package as rust crate
 - ( ) change `{:kind kind ...}` to `[kind ...]`

@@ -311,6 +311,11 @@
                    ">\n"
                    ;(map |(norg/export/block :html $ ctx) contents)
                    "</li>\n"))
+     :horizontal-line (string
+                        "<hr"
+                        (html/create-attrs
+                          (filter-attrs :html (parse-attrs (block :attrs))))
+                        ">\n")
      "TODO_BLOCK\n"))
 
 (defn norg/export/block

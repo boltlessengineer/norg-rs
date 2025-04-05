@@ -155,6 +155,7 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                         },
                     })
                 }
+                "horizontal_line" => Some(NorgBlock::HorizontalLine { attrs: vec![] }),
                 _ => None,
             };
             block.map(|block| {
