@@ -118,6 +118,12 @@
                          ;(map html/escape lines)
                          "</code></pre>\n")))}}])
 
+(defn- norg/tag/tada
+  [ctx params target]
+  [{:kind :paragraph
+    :inlines [{:kind :text
+               :text "tada"}]}])
+
 (def message "message from neorg environment")
 
 (defn- norg/tag/eval
@@ -156,6 +162,7 @@
     "code" norg/tag/code
     "eval" norg/tag/eval
     "document.meta" norg/tag/document.meta
+    "tada" norg/tag/tada
     "\\img" norg/inline-tag/img})
 
 (def norg/export-hook
@@ -264,7 +271,10 @@
                  "</section>\n"))
      :paragraph (let [inlines (block :inlines)]
                  (string
-                   "<p>"
+                   "<p"
+                   (html/create-attrs
+                     (filter-attrs :html (parse-attrs (block :attrs))))
+                   ">"
                    ;(map |(norg/export/inline :html $ ctx) inlines)
                    "</p>\n"))
      :unordered-list (let [items (block :items)]
@@ -325,6 +335,15 @@
                                     (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
                                     (def ast (tag ctx params lines))
                                     (string/join (map |(norg/export/block lang $ ctx) ast)))
+    (= (block :kind) :carryover-tag) (let [name (block :name)
+                                           params (block :params)
+                                           params (if params params "")
+                                           params (string/split ";" params)
+                                           target (block :target)
+                                           tag (norg/ast/tag name)]
+                                       (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
+                                       (def ast (tag ctx params target))
+                                       (string/join (map |(norg/export/block lang $ ctx) ast)))
     (case lang
       :html (norg/export/block-html-impl)
       (error "unkown language"))))

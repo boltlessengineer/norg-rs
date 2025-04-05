@@ -41,6 +41,7 @@ pub enum NorgBlock {
     CarryoverTag {
         params: Option<String>,
         name: String,
+        target: Box<Self>,
     },
     RangedTag {
         params: Option<String>,
@@ -392,7 +393,22 @@ impl Into<Janet> for NorgBlock {
                 )
                 .finalize()
                 .into(),
-            _ => unimplemented!(),
+            CarryoverTag { params, name, target } => JanetStruct::builder(4)
+                .put(
+                    JanetKeyword::new(b"kind"),
+                    JanetKeyword::new(b"carryover-tag"),
+                )
+                .put(
+                    JanetKeyword::new(b"params"),
+                    match params {
+                        Some(params) => Janet::string(params.as_bytes().into()),
+                        None => Janet::nil(),
+                    },
+                )
+                .put(JanetKeyword::new(b"name"), name.as_str())
+                .put(JanetKeyword::new(b"block"), *target)
+                .finalize()
+                .into(),
         }
     }
 }

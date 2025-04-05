@@ -15,10 +15,18 @@ pub fn parse(text: &[u8]) -> Vec<NorgBlock> {
     tsnode_to_blocks(root, text)
 }
 
+#[derive(Default)]
+struct CarryoverScanner {
+    tags: Vec<(String, Option<String>)>,
+    attrs: Vec<Attribute>,
+}
+
 fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
     let mut cursor = node.walk();
+    let mut carryovers = CarryoverScanner::default();
     node.named_children(&mut cursor)
-        .map(|node| match node.kind() {
+        .flat_map(|node| {
+            let block = match node.kind() {
             "section" => {
                 let heading_node = node.child_by_field_name("heading").unwrap();
                 let prefix_count = heading_node
@@ -39,7 +47,7 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                 })
             }
             "paragraph" => Some(NorgBlock::Paragraph {
-                attrs: vec![],
+                attrs: std::mem::take(&mut carryovers.attrs),
                 inlines: tsnode_to_inlines(node, text),
             }),
             "infirm_tag" => {
@@ -78,6 +86,11 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                     content: lines,
                 })
             }
+            "carryover_attributes" => {
+                let attrs = get_attributes_from_tsnode(node, text).unwrap();
+                carryovers.attrs.extend(attrs);
+                None
+            }
             "carryover_tag" => {
                 let name = node
                     .child_by_field_name("name")
@@ -88,10 +101,8 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                 let raw_param = node
                     .child_by_field_name("param")
                     .map(|node| node.utf8_text(text).unwrap().to_string());
-                Some(NorgBlock::CarryoverTag {
-                    name,
-                    params: raw_param,
-                })
+                carryovers.tags.push((name, raw_param));
+                None
             }
             "unordered_list" => {
                 let prefix_node = node.child(0).unwrap().child(0).unwrap();
@@ -145,8 +156,22 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                 })
             }
             _ => None,
+            };
+            block.map(|block| {
+                if carryovers.tags.len() > 0 {
+                    let tags = std::mem::take(&mut carryovers.tags);
+                    tags.into_iter().fold(block, |block, (name, params)| {
+                        NorgBlock::CarryoverTag {
+                            name,
+                            params,
+                            target: Box::new(block),
+                        }
+                    })
+                } else {
+                    block
+                }
+            })
         })
-        .flatten()
         .collect()
 }
 
