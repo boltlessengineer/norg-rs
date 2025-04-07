@@ -4,8 +4,9 @@ use janetrs::{
     Janet, JanetArray, JanetConversionError, JanetKeyword, JanetString, JanetStruct, JanetTuple,
     JanetType, TaggedJanet,
 };
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Attribute {
     Key(String),
     KeyValue(String, String),
@@ -57,7 +58,7 @@ impl Into<Janet> for Attribute {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NorgInline {
     Text(String),
     Special(String),

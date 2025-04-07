@@ -2,10 +2,11 @@ use janetrs::{
     Janet, JanetConversionError, JanetFunction, JanetKeyword, JanetString, JanetStruct, JanetType,
     TaggedJanet,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::inline::{Attribute, NorgInline};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NorgBlock {
     Section {
         attrs: Vec<Attribute>,
@@ -48,6 +49,8 @@ pub enum NorgBlock {
         name: String,
         content: Vec<String>,
     },
+    // TODO: do I really need this type in rust?
+    #[serde(skip)]
     Embed {
         attrs: Vec<Attribute>,
         // TODO: switch to HashMap<JanetKeyword, JanetFunction> instead
@@ -59,7 +62,7 @@ pub enum NorgBlock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListItem {
     pub attrs: Vec<Attribute>,
     pub contents: Vec<NorgBlock>,

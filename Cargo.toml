@@ -3,10 +3,14 @@ name = "norg-rs"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+resolver = "2"
+members = ["bindings/js"]
+
 [dependencies]
 janetrs = { git = "https://github.com/boltlessengineer/janetrs", branch = "feat/unmarshal" }
 # janetrs = { path = "../../repo/janetrs" }
 serde = { version = "1.0.219", features = ["derive"] }
-tree-sitter = "0.25.3"
+tree-sitter = { version = "0.25.3", features = [ "wasm" ] }
 tree-sitter-norg = { git = "https://github.com/boltlessengineer/tree-sitter-norg3-pr1", branch = "experiment" }
 # tree-sitter-norg = { path = "../tree-sitter-norg3" }
