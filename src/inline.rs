@@ -65,6 +65,7 @@ pub enum NorgInline {
     Escape(char),
     Whitespace,
     SoftBreak,
+    HardBreak,
     Bold {
         markup: Vec<Self>,
         attrs: Vec<Attribute>,
@@ -127,6 +128,7 @@ impl TryFrom<Janet> for NorgInline {
         match kind.as_bytes() {
             b"whitespace" => Ok(NorgInline::Whitespace),
             b"softbreak" => Ok(NorgInline::SoftBreak),
+            b"hardbreak" => Ok(NorgInline::HardBreak),
             b"text" => Ok(NorgInline::Text(
                 value
                     .get_owned(JanetKeyword::new(b"text"))
@@ -252,6 +254,9 @@ impl Into<Janet> for NorgInline {
                 .finalize(),
             SoftBreak => JanetStruct::builder(1)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"softbreak"))
+                .finalize(),
+            HardBreak => JanetStruct::builder(1)
+                .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"hardbreak"))
                 .finalize(),
             Text(text) => JanetStruct::builder(2)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"text"))

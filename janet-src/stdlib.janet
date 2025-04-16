@@ -211,6 +211,7 @@
      (case (inline :kind)
        :whitespace " "
        :softbreak "\n"
+       :hardbreak "<br>"
        :text (html/escape (inline :text))
        :special (html/escape (inline :special))
        :bold (attached-modifier :strong)
