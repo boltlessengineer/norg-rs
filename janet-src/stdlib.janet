@@ -92,9 +92,9 @@
                       ")\n"))
              :html (fn [ctx]
                      (string
-                       "<img"
+                       "<figure><img"
                        (html/create-attrs {:src src})
-                       ">\n"))}}])
+                       "></figure>\n"))}}])
 
 (defn- norg/tag/code
   # TODO: find better way to pass "lines" parameter
@@ -110,13 +110,13 @@
              :html (fn [ctx]
                      (let [language (get params 0)]
                        (string
-                         "<pre><code"
+                         "<figure><pre><code"
                          (if language
                            (html/create-attrs {:class (string "language-" language)}))
                          ">"
                          # TODO: find if there is a line starting with three or more backticks
                          ;(map html/escape lines)
-                         "</code></pre>\n")))}}])
+                         "</code></pre></figure>\n")))}}])
 
 (defn- norg/tag/tada
   [ctx params target]
