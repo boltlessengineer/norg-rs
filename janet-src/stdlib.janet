@@ -58,7 +58,7 @@
                            (* :eol :space*)))
                    "]")
                 ,|[;$&])
-      :key (<- (some (if-not (set ,special) 1)))
+      :key (<- (some (if-not (set "{}[]:\n") 1)))
       :property (* :space*
                    :key
                    ":"
@@ -72,7 +72,7 @@
                             (* :eol :space*)))
                     "}")
                  ,|(struct ;$&))
-      :atom (/ (<- (some (if-not (set ,special) 1)))
+      :atom (/ (<- (some (if-not (set "{}[]\n") 1)))
                ,handle-atom)}))
 
 (defn norg/meta/parse
