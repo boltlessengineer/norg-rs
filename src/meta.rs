@@ -4,6 +4,7 @@ use janetrs::{Janet, JanetConversionError, JanetString, TaggedJanet};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
+#[serde(untagged)]
 pub enum NorgMeta {
     Nil,
     Bool(bool),
@@ -69,5 +70,53 @@ impl TryFrom<Janet> for NorgMeta {
             }
             _ => todo!("error here"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NorgMeta;
+    use serde_json;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn test_serde_norgmeta_serialization() {
+        // Nil → null
+        assert_eq!(serde_json::to_string(&NorgMeta::Nil).unwrap(), "null");
+
+        // Bool → true/false
+        assert_eq!(serde_json::to_string(&NorgMeta::Bool(true)).unwrap(), "true");
+        assert_eq!(serde_json::to_string(&NorgMeta::Bool(false)).unwrap(), "false");
+
+        // Str → "string"
+        assert_eq!(
+            serde_json::to_string(&NorgMeta::Str("hello".into())).unwrap(),
+            "\"hello\""
+        );
+
+        // Num → number
+        assert_eq!(serde_json::to_string(&NorgMeta::Num(3.14)).unwrap(), "3.14");
+
+        // Array → [ … ]
+        let arr = NorgMeta::Array(vec![
+            NorgMeta::Num(1.0),
+            NorgMeta::Bool(false),
+            NorgMeta::Str("x".into()),
+        ]);
+        assert_eq!(
+            serde_json::to_string(&arr).unwrap(),
+            "[1.0,false,\"x\"]"
+        );
+
+        // Object → { … }
+        let mut map = BTreeMap::new();
+        map.insert("a".to_string(), NorgMeta::Nil);
+        map.insert("b".to_string(), NorgMeta::Num(2.0));
+        let obj = NorgMeta::Object(map);
+        // BTreeMap serializes keys in sorted order
+        assert_eq!(
+            serde_json::to_string(&obj).unwrap(),
+            "{\"a\":null,\"b\":2.0}"
+        );
     }
 }

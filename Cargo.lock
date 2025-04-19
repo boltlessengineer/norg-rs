@@ -522,6 +522,7 @@ dependencies = [
  "itertools 0.14.0",
  "janetrs",
  "serde",
+ "serde_json",
  "tree-sitter",
  "tree-sitter-norg",
  "unicode_categories",
