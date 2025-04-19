@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Attribute {
+    Blank,
     Key(String),
     KeyValue(String, String),
 }
@@ -44,6 +45,7 @@ impl TryFrom<Janet> for Attribute {
 impl Into<JanetTuple<'_>> for Attribute {
     fn into(self) -> JanetTuple<'static> {
         match self {
+            Self::Blank => janetrs::tuple![],
             Self::Key(key) => janetrs::tuple![JanetString::from(key)],
             Self::KeyValue(key, val) => {
                 janetrs::tuple![JanetString::from(key), JanetString::from(val)]

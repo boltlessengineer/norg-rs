@@ -11,7 +11,6 @@ pub fn parse(text: &[u8]) -> Vec<NorgBlock> {
         .expect("Error loading Norg parser");
     let tree = parser.parse(&text, None).unwrap();
     let root = tree.root_node();
-    dbg!(root.to_sexp());
     tsnode_to_blocks(root, text)
 }
 
@@ -275,18 +274,15 @@ fn get_attributes_from_tsnode(node: tree_sitter::Node, text: &[u8]) -> Option<Ve
             .map(|attr_node| {
                 let key = attr_node
                     .child_by_field_name("key")
-                    .map(|node| node.utf8_text(text).unwrap())
-                    .unwrap();
+                    .map(|node| node.utf8_text(text).unwrap());
                 let val = attr_node
                     .child_by_field_name("value")
                     .map(|node| node.utf8_text(text).unwrap());
-                // let s = attr_node.utf8_text(text).unwrap();
-                // let mut parts = s.splitn(2, char::is_whitespace);
-                // let key = parts.next().unwrap();
-                if let Some(val) = val {
-                    Attribute::KeyValue(key.to_string(), val.to_string())
-                } else {
-                    Attribute::Key(key.to_string())
+                match (key, val) {
+                    (None, None) => Attribute::Blank,
+                    (Some(key), None) => Attribute::Key(key.to_string()),
+                    (Some(key), Some(val)) => Attribute::KeyValue(key.to_string(), val.to_string()),
+                    _ => unreachable!(),
                 }
             })
             .collect()
