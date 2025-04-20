@@ -15,12 +15,16 @@
     ""
     (map (fn [[x y]] [x y]) (pairs attrs))))
 
-# (defn neorg/resolve-linkable
-#   "link resolver. useful when exporting multiple files
-#    it can also be used to style links based on its target"
-#   [linkable]
-#   # expect linkable to be a link or an anchor
-#   linkable)
+(defn neorg/query-documents
+  "query norg documents"
+  [query]
+  (error "neorg/query-documents is not yet implemented"))
+
+(defn neorg/resolve-link-target
+  "link resolver. returns absolute path to the note based on given link target"
+  [target]
+  # TODO: parse `target` here..?
+  (error "neorg/resolve-link-target is not yet implemented"))
 
 # (defn norg/parse/doc
 #   "parse document"
@@ -33,6 +37,11 @@
 # (defn norg/parse/inline
 #   "parse inline text"
 #   [text]
+#   (error "todo"))
+
+# (defn norg/parse/link
+#   "parse link target"
+#   [link]
 #   (error "todo"))
 
 (defn- handle-atom
