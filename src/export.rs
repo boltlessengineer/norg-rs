@@ -128,3 +128,22 @@ impl Default for Exporter {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_exporter_run_janet() {
+        let exporter = Exporter::new();
+        exporter
+            .run_janet(r#" (def test-message "hello world") "#)
+            .unwrap();
+        let test_message = exporter.run_janet("test-message").unwrap();
+        let test_message = test_message
+            .try_unwrap::<janetrs::JanetString>()
+            .unwrap()
+            .to_string();
+        assert_eq!(test_message, String::from("hello world"));
+    }
+}
