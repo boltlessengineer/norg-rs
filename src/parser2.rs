@@ -4,7 +4,7 @@
 
 use std::{iter::Peekable, ops::Range};
 
-use crate::block::{ListItem, NorgBlock};
+use crate::{block::{ListItem, NorgBlock}, inline::NorgInline};
 use unicode_categories::UnicodeCategories as _;
 
 fn flatatom_to_block(text: &str, block: Mark<AtomBlock>) -> NorgBlock {
@@ -15,9 +15,16 @@ fn flatatom_to_block(text: &str, block: Mark<AtomBlock>) -> NorgBlock {
         AtomBlock::Heading { level, inline } => {
             todo!("heading in list item is not implemented yet")
         }
-        AtomBlock::Paragraph => NorgBlock::Paragraph {
-            attrs: vec![],
-            inlines: vec![],
+        AtomBlock::Paragraph => {
+            let mut inlines = vec![];
+            let mut scanner = Scanner::new(&text[block.span]);
+            while let Some(inline) = scanner.parse_inline() {
+                inlines.push(inline);
+            }
+            NorgBlock::Paragraph {
+                attrs: vec![],
+                inlines,
+            }
         },
         AtomBlock::InfirmTag { ident } => NorgBlock::InfirmTag {
             name: text[ident.clone()].to_string(),
@@ -141,15 +148,20 @@ where
     }
 }
 
-pub struct Parser<I: Iterator<Item = FlatNode>> {
-    iter: I,
-    heading_level: usize,
-    nest_level: usize,
-}
-
 pub struct Scanner<'src> {
     source: &'src str,
     pos: usize,
+    inline_stack: Vec<InlineMarkupKind>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum InlineMarkupKind {
+    Bold,
+    Italic,
+    Underline,
+    Strikethrough,
+    Markup,
+    Target,
 }
 
 #[derive(Clone, Debug)]
@@ -160,7 +172,7 @@ pub enum FlatNode {
 
 impl<'src> Scanner<'src> {
     pub fn new(source: &'src str) -> Self {
-        Self { source, pos: 0 }
+        Self { source, pos: 0, inline_stack: vec![] }
     }
 
     pub fn parse_flat(&mut self) -> Vec<FlatNode> {
@@ -180,6 +192,7 @@ impl<'src> Scanner<'src> {
                 if prev_block.kind == AtomBlock::Paragraph
                     && block.kind == AtomBlock::Paragraph
                 {
+                    // extend paragraph
                     println!("append {:?}", block.span);
                     prev_block.span = prev_block.span.start..block.span.end;
                     self.pos = block.span.end;
@@ -396,6 +409,93 @@ impl<'src> Scanner<'src> {
         res
     }
 
+    /// parse inline nodes
+    /// NOTE: this will continue until end of source
+    fn parse_inline(&mut self) -> Option<NorgInline> {
+        let tk = self.lex_common_at(self.pos);
+        use CommonToken::*;
+        self.pos = tk.span.end;
+        match tk.kind {
+            Space => Some(NorgInline::Whitespace),
+            Newline => Some(NorgInline::SoftBreak),
+            Eof => None,
+            Text => Some(NorgInline::Text(self.source[tk.span].to_string())),
+            Special(']') => {
+                if self.inline_stack.last() == Some(&InlineMarkupKind::Markup) {
+                    self.inline_stack.pop();
+                    None
+                } else {
+                    Some(NorgInline::Special(']'.to_string()))
+                }
+            }
+            Special('[') => {
+                self.inline_stack.push(InlineMarkupKind::Markup);
+                let mut markup = vec![];
+                while let Some(inline) = self.parse_inline() {
+                    markup.push(inline);
+                }
+                // TODO: uhh how to parse attributes with this pattern?
+                Some(NorgInline::Anchor { target: None, markup, attrs: vec![] })
+            }
+            Special(ch @ ('*' | '/' | '_' | '~')) => {
+                // 1. don't care about previous token. repeated token should have been already
+                //    consumed from previous iteration
+                // 2. lookahead and check if next character mets the requirements
+                let kind = match ch {
+                    '*' => InlineMarkupKind::Bold,
+                    '/' => InlineMarkupKind::Italic,
+                    '_' => InlineMarkupKind::Underline,
+                    '~' => InlineMarkupKind::Strikethrough,
+                    _ => unreachable!(),
+                };
+                let next_ch = self.char_at(self.pos);
+                if next_ch == ch {
+                    // repeated punctuations
+                    let mut count = 1;
+                    while self.char_at(self.pos) == ch {
+                        self.pos += ch.len_utf8();
+                        count += 1;
+                    }
+                    Some(NorgInline::Special(ch.to_string().repeat(count)))
+                } else if self.inline_stack.last() == Some(&kind) && next_ch.is_whitespace() {
+                    // closing modifier
+                    self.inline_stack.pop();
+                    None
+                } else if !self.inline_stack.contains(&kind) && !next_ch.is_whitespace() {
+                    // opening modifier
+                    self.inline_stack.push(kind);
+                    let mut markup = vec![];
+                    while let Some(inline) = self.parse_inline() {
+                        markup.push(inline);
+                    }
+                    let attrs = vec![];
+                    Some(match kind {
+                        InlineMarkupKind::Bold => NorgInline::Bold { markup, attrs },
+                        InlineMarkupKind::Italic => NorgInline::Italic { markup, attrs },
+                        InlineMarkupKind::Underline => NorgInline::Underline { markup, attrs },
+                        InlineMarkupKind::Strikethrough => NorgInline::Strikethrough { markup, attrs },
+                        _ => unreachable!(),
+                    })
+                } else {
+                    Some(NorgInline::Special(ch.to_string()))
+                }
+            }
+            Special('\\') => {
+                let next_ch = self.char_at(tk.span.end);
+                if next_ch.is_punctuation() {
+                    self.pos = tk.span.end + next_ch.len_utf8();
+                    Some(NorgInline::Escape(next_ch))
+                } else if next_ch == '\n' {
+                    self.pos = tk.span.end;
+                    Some(NorgInline::HardBreak)
+                } else {
+                    Some(NorgInline::Special('\\'.to_string()))
+                }
+            }
+            Special(ch) => Some(NorgInline::Special(ch.to_string())),
+        }
+    }
+
     fn char_at(&self, pos: usize) -> char {
         if pos >= self.source.len() {
             return '\0';
@@ -443,7 +543,18 @@ impl<'src> Scanner<'src> {
                 CommonToken::Special(ch),
                 start..(start + ch.len_utf8()),
             ),
-            ch => unimplemented!("implement for {ch}")
+            _ => {
+                let mut pos = start;
+                loop {
+                    let next = self.char_at(pos);
+                    if next.is_whitespace() || next.is_punctuation() || next == '\0' {
+                        break;
+                    }
+                    pos += next.len_utf8();
+                }
+                assert_ne!(start, pos);
+                Mark::new(CommonToken::Text, start..pos)
+            }
         }
     }
     fn lex_line(&self, from: usize) -> Range<usize> {

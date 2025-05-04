@@ -56,4 +56,5 @@ Text -(rust)-> Vec<Block> -(janet)-> Other spec
 - (x) implement carryover tags & carryover attributes
 - (x) package as rust crate
 - ( ) package to wasm
-- ( ) change `{:kind kind ...}` to `[kind ...]`
+-- ( ) rewrite parser from scratch in rust to replace tree-sitter parser
+- (?) change `{:kind kind ...}` to `[kind ...]`
