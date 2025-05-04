@@ -12,10 +12,10 @@ impl Converter {
     pub fn new() -> Self {
         Self { inner: Default::default() }
     }
-    #[wasm_bindgen]
-    pub fn run_janet(&self, code: &str) {
-        let _ = self.inner.run_janet(code);
-    }
+    // #[wasm_bindgen]
+    // pub fn run_janet(&self, code: &str) {
+    //     let _ = self.inner.run_janet(code);
+    // }
     #[wasm_bindgen]
     pub fn convert(&mut self, ast: JsValue) -> Result<JsValue, JsValue> {
         // let ast = norg_rs::parser::parse(document.as_bytes());

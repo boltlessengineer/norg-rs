@@ -1,7 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-#![allow(unreachable_code)]
-
 use std::{iter::Peekable, ops::Range};
 
 use crate::{block::{ListItem, NorgBlock}, inline::NorgInline};

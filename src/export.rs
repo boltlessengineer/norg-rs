@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use janetrs::{
+    Janet, JanetConversionError,
     client::JanetClient,
     env::{DefOptions, JanetEnvironment},
-    Janet, JanetConversionError,
 };
 use serde::Serialize;
 
@@ -91,8 +91,11 @@ impl Exporter {
         Self { janet_client }
     }
 
-    pub fn run_janet(&self, code: impl AsRef<str>) -> Result<Janet, janetrs::client::Error> {
-        self.janet_client.run(code.as_ref())
+    pub fn with_janet<F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut JanetClient) -> T,
+    {
+        f(&mut self.janet_client)
     }
 
     pub fn export(
@@ -135,15 +138,47 @@ mod test {
 
     #[test]
     fn test_exporter_run_janet() {
-        let exporter = Exporter::new();
+        let mut exporter = Exporter::new();
         exporter
-            .run_janet(r#" (def test-message "hello world") "#)
+            .with_janet(|janet| janet.run(r#" (def test-message "hello world") "#))
             .unwrap();
-        let test_message = exporter.run_janet("test-message").unwrap();
+        let test_message = exporter
+            .with_janet(|janet| janet.run(r#" test-message "#))
+            .unwrap();
         let test_message = test_message
             .try_unwrap::<janetrs::JanetString>()
             .unwrap()
             .to_string();
         assert_eq!(test_message, String::from("hello world"));
+    }
+
+    #[test]
+    fn test_add_c_fn() {
+        use janetrs::Janet;
+
+        #[janetrs::janet_fn(arity(fix(1)))]
+        fn chars(args: &mut [Janet]) -> Janet {
+            use janetrs::JanetArgs as _;
+            use janetrs::JanetType::*;
+            use janetrs::{JanetTuple, TaggedJanet};
+
+            match args.get_tagged_matches(0, &[Buffer, String]) {
+                TaggedJanet::Buffer(b) => b.chars().collect::<JanetTuple>().into(),
+                TaggedJanet::String(s) => s.chars().collect::<JanetTuple>().into(),
+                _ => unreachable!("Already checked to be a buffer|string"),
+            }
+        }
+
+        let mut exporter = Exporter::new();
+        exporter.with_janet(|client| {
+            client.add_c_fn(janetrs::env::CFunOptions::new(c"chars", chars_c));
+        });
+        let res = exporter
+            .with_janet(|janet| janet.run(r#" (chars "helo") "#))
+            .unwrap();
+        assert_eq!(
+            res,
+            Janet::from(janetrs::tuple!["h", "e", "l", "o"])
+        );
     }
 }
