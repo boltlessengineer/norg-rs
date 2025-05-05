@@ -169,6 +169,8 @@ impl Default for Exporter {
 
 #[cfg(test)]
 mod test {
+    use crate::target::{NorgLinkAppTarget, NorgLinkTarget};
+
     use super::*;
 
     #[test]
@@ -212,5 +214,24 @@ mod test {
             .with_janet(|janet| janet.run(r#" (chars "helo") "#))
             .unwrap();
         assert_eq!(res, Janet::from(janetrs::tuple!["h", "e", "l", "o"]));
+    }
+
+    #[test]
+    fn test_parse_target() {
+        let mut exporter = Exporter::new();
+        let val = exporter.with_janet(|client| {
+            client
+                .run(r#" (norg/target/parse ": $foo : bar") "#)
+                .unwrap()
+        });
+        let target = NorgLinkTarget::try_from(val);
+        assert_eq!(
+            target,
+            Ok(NorgLinkTarget::App(NorgLinkAppTarget {
+                workspace: Some(String::from("foo")),
+                path: String::from("bar"),
+                scopes: vec![],
+            }))
+        );
     }
 }

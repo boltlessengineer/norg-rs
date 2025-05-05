@@ -15,16 +15,15 @@
     ""
     (map (fn [[x y]] [x y]) (pairs attrs))))
 
-(defn neorg/query-documents
-  "query norg documents"
-  [query]
-  (error "neorg/query-documents is not yet implemented"))
+# (defn neorg/query-documents
+#   "query norg documents"
+#   [query]
+#   (error "neorg/query-documents is not yet implemented"))
 
-(defn neorg/resolve-link-target
-  "link resolver. returns absolute path to the note based on given link target"
+# HACK: I think we should provide "neorg" as a janet package instead
+(defn- _neorg/resolve-link-target
   [target]
-  # TODO: parse `target` here..?
-  (error "neorg/resolve-link-target is not yet implemented"))
+  ((compile ['neorg/export/path target])))
 
 # (defn norg/parse/doc
 #   "parse document"
@@ -55,7 +54,7 @@
       num
       atom)))
 (def- special "{}[]:\n")
-(def meta-peg
+(def- meta-peg
   (peg/compile
     ~{:main (* (any :property) -1)
       :value (+ :array :object :atom)
@@ -87,6 +86,49 @@
 (defn norg/meta/parse
   [text]
   (struct ;(peg/match meta-peg text)))
+
+(defn- app-target
+  [& args]
+  [:app (match args
+          [[:workspace workspace] path scopes] {:workspace workspace
+                                                :path path
+                                                :scopes scopes}
+          [path scopes] {:path path
+                         :scopes scopes})])
+
+(def target-peg
+  (peg/compile
+    ~{:main (* :s* (+ :app :local))
+      :app (/ (* (? (* :sep :workspace))
+                 :sep
+                 :scope-text
+                 (+ (* :sep :scopes)
+                    (constant [])))
+              ,app-target)
+      :local (/ (+ :scopes :uri)
+                ,|[:local $])
+      :uri (/ (<- (some 1))
+              ,|[:uri $])
+      :scopes (/ (* :scope (any (* :sep (? :scope))))
+                 ,|[:scopes [;$&]])
+      :workspace (/ (* "$" :scope-text)
+                    ,|[:workspace $])
+      :scope-text (<- (some (if-not :sep 1)))
+      :sep (* :s* ":" :s*)
+      :scope (+ :scope-heading
+                :scope-wiki)
+      :scope-heading-prefix (/ (* (<- (some "*")) :s*)
+                               ,length)
+      :scope-heading (/ (* :scope-heading-prefix
+                           :scope-text)
+                        ,|[:heading $0 $1])
+      :scope-wiki (* "?"
+                     :s+
+                     :scope-text)}))
+
+(defn norg/target/parse
+  [text]
+  ((peg/match target-peg text) 0))
 
 (defn- norg/tag/image
   ".image implementation"
@@ -228,7 +270,7 @@
        :underline (attached-modifier :span {:class "underline"})
        :strikethrough (attached-modifier :span {:class "strikethrough"})
        :verbatim (attached-modifier :code)
-       :link (let [href (inline :target)
+       :link (let [href (_neorg/resolve-link-target (inline :target))
                    markup (inline :markup)
                    attrs {:href href}]
                (string
