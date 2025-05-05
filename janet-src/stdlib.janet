@@ -128,7 +128,7 @@
                          "</code></pre></figure>\n")))}}])
 
 (defn- norg/tag/tada
-  [ctx params target]
+  [ctx params]
   [{:kind :paragraph
     :inlines [{:kind :text
                :text "tada"}]}])
