@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use janetrs::{
     Janet, JanetConversionError,
@@ -31,10 +31,37 @@ impl Into<janetrs::JanetKeyword<'_>> for ExportTarget {
 
 #[derive(Debug, Serialize)]
 pub struct ExportCtx {
+    pub path: PathBuf,
+}
+
+impl Into<janetrs::JanetStruct<'_>> for ExportCtx {
+    fn into(self) -> janetrs::JanetStruct<'static> {
+        janetrs::JanetStruct::builder(1)
+            .put(
+                janetrs::JanetKeyword::new(b"path"),
+                self.path.to_str().unwrap(),
+            )
+            .finalize()
+    }
+}
+impl Into<janetrs::JanetTable<'_>> for ExportCtx {
+    fn into(self) -> janetrs::JanetTable<'static> {
+        let mut tbl = janetrs::JanetTable::with_capacity(1);
+        tbl.insert(
+            janetrs::JanetKeyword::new(b"path"),
+            self.path.to_str().unwrap(),
+        );
+        tbl
+    }
+}
+
+// TODO: merge this with ExportCtx because both are basically same object in janet stdlib
+#[derive(Debug, Serialize)]
+pub struct ExportMeta {
     pub meta: BTreeMap<String, NorgMeta>,
 }
 
-impl TryFrom<janetrs::JanetTable<'_>> for ExportCtx {
+impl TryFrom<janetrs::JanetTable<'_>> for ExportMeta {
     type Error = JanetConversionError;
 
     fn try_from(value: janetrs::JanetTable) -> Result<Self, Self::Error> {
@@ -102,27 +129,35 @@ impl Exporter {
         &mut self,
         target: ExportTarget,
         ast: Vec<crate::block::NorgBlock>,
-    ) -> Result<(String, ExportCtx), ExportError> {
+        ctx: Option<ExportCtx>,
+    ) -> Result<(String, ExportMeta), ExportError> {
         self.janet_client.add_def(DefOptions::new(
             "ast",
             Janet::tuple(ast.into_iter().collect()),
         ));
         self.janet_client
             .add_def(DefOptions::new("lang", Janet::keyword(target.into())));
+        self.janet_client.add_def(DefOptions::new(
+            "ctx",
+            match ctx {
+                Some(ctx) => Janet::table(ctx.into()),
+                None => Janet::nil(),
+            },
+        ));
         let res = self.janet_client.run(
             r#"
-            (norg/export/doc lang ast)
+            (norg/export/doc lang ast ctx)
         "#,
         )?;
         let janetrs::TaggedJanet::Tuple(tuple) = res.unwrap() else {
             todo!("no tuple error");
         };
-        let [res, ctx] = tuple.as_ref() else {
+        let [res, meta] = tuple.as_ref() else {
             todo!("tuple dismatch error");
         };
         let res = res.try_unwrap::<janetrs::JanetString>()?.to_string();
-        let ctx = ctx.try_unwrap::<janetrs::JanetTable>()?.try_into()?;
-        Ok((res, ctx))
+        let meta = meta.try_unwrap::<janetrs::JanetTable>()?.try_into()?;
+        Ok((res, meta))
     }
 }
 
@@ -176,9 +211,6 @@ mod test {
         let res = exporter
             .with_janet(|janet| janet.run(r#" (chars "helo") "#))
             .unwrap();
-        assert_eq!(
-            res,
-            Janet::from(janetrs::tuple!["h", "e", "l", "o"])
-        );
+        assert_eq!(res, Janet::from(janetrs::tuple!["h", "e", "l", "o"]));
     }
 }

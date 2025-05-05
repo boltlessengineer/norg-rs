@@ -20,7 +20,7 @@ impl Converter {
     pub fn convert(&mut self, ast: JsValue) -> Result<JsValue, JsValue> {
         // let ast = norg_rs::parser::parse(document.as_bytes());
         let ast = serde_wasm_bindgen::from_value(ast)?;
-        let (html, ctx) = self.inner.export(norg_rs::export::ExportTarget::Html, ast)
+        let (html, ctx) = self.inner.export(norg_rs::export::ExportTarget::Html, ast, None)
             .map_err(|e| JsValue::from_str(&format!("Export failed: {:?}", e)))?;
         let ctx_js = serde_wasm_bindgen::to_value(&ctx)
             .map_err(|e| JsValue::from_str(&format!("Failed to serialize export context: {:?}", e)))?;
