@@ -10,7 +10,7 @@
   (def out (file/open "out" :wn))
   (file/write out image)
   (file/close out))
-  (def chunks (seq [b :in image] (string b)))
+(def chunks (seq [b :in image] (string b)))
   # print raw rust code to directly embed on rust file.
   #
   # (print "static IMAGE_EMBED: &[u8] = &["
