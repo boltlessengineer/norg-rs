@@ -221,7 +221,7 @@ mod test {
         let mut exporter = Exporter::new();
         let val = exporter.with_janet(|client| {
             client
-                .run(r#" (norg/target/parse ": $foo : bar") "#)
+                .run(r#" (norg/parse/target ": $foo : bar") "#)
                 .unwrap()
         });
         let target = NorgLinkTarget::try_from(val);
@@ -229,7 +229,7 @@ mod test {
             target,
             Ok(NorgLinkTarget::App(NorgLinkAppTarget {
                 workspace: Some(String::from("foo")),
-                path: String::from("bar"),
+                path: PathBuf::from("bar"),
                 scopes: vec![],
             }))
         );

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 #[derive(Debug, PartialEq)]
 pub enum NorgLinkTarget {
     Local(NorgLinkLocalTarget),
@@ -13,7 +15,7 @@ pub enum NorgLinkLocalTarget {
 #[derive(Debug, PartialEq)]
 pub struct NorgLinkAppTarget {
     pub workspace: Option<String>,
-    pub path: String,
+    pub path: PathBuf,
     pub scopes: Vec<NorgLinkScope>,
 }
 
@@ -85,6 +87,16 @@ impl TryFrom<janetrs::JanetTuple<'_>> for NorgLinkLocalTarget {
     }
 }
 
+impl From<PathBuf> for NorgLinkAppTarget {
+    fn from(path: PathBuf) -> Self {
+        Self {
+            workspace: None,
+            path,
+            scopes: vec![],
+        }
+    }
+}
+
 impl TryFrom<janetrs::Janet> for NorgLinkAppTarget {
     type Error = janetrs::JanetConversionError;
 
@@ -111,8 +123,8 @@ impl TryFrom<janetrs::JanetStruct<'_>> for NorgLinkAppTarget {
             .unwrap()
             .try_unwrap::<janetrs::JanetString>()
             .unwrap()
-            .to_str_lossy()
-            .to_string();
+            .to_path_lossy()
+            .to_path_buf();
         let scopes = value
             .get(janetrs::JanetKeyword::new("scopes"))
             .unwrap()
