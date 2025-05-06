@@ -97,6 +97,26 @@ impl From<PathBuf> for NorgLinkAppTarget {
     }
 }
 
+impl Into<janetrs::JanetStruct<'_>> for NorgLinkAppTarget {
+    fn into(self) -> janetrs::JanetStruct<'static> {
+        janetrs::JanetStruct::builder(3)
+            .put(janetrs::JanetKeyword::new("workspace"), match self.workspace {
+                Some(name) => janetrs::JanetString::from(name).into(),
+                None => janetrs::Janet::nil(),
+            })
+            .put(
+                janetrs::JanetKeyword::new("path"),
+                janetrs::JanetString::from(self.path.to_str().unwrap()),
+            )
+            .put(
+                janetrs::JanetKeyword::new("scopes"),
+                // TODO: pass scopes
+                janetrs::tuple![],
+            )
+            .finalize()
+    }
+}
+
 impl TryFrom<janetrs::Janet> for NorgLinkAppTarget {
     type Error = janetrs::JanetConversionError;
 
