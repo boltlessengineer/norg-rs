@@ -45,14 +45,14 @@
 
 # HACK: I think we should provide "neorg" as a janet package instead
 (defn- _neorg/export/linkable
-  [lang app-target node]
+  [ctx lang app-target node]
   # HACK: lazily found neorg/export/linkable
   # I'm pretty sure there is better api than `compile`...
   (def neorg/export/linkable ((compile 'neorg/export/linkable)))
-  (neorg/export/linkable lang app-target node))
+  (neorg/export/linkable ctx lang app-target node))
 
 (defn neorg/export/linkable
-  [lang app-target node]
+  [ctx lang app-target node]
   (error "`neorg/export/linkable` is not yet implemented"))
 
 (defn norg/resolve-anchor
@@ -265,7 +265,7 @@
        (def markup (node :markup))
        (def attrs (match local
                    [:uri uri]       {:href uri}
-                   [:scopes scopes] {:href "#"}))
+                   [:scopes scopes] {:href "#todo"}))
        (string
          "<a"
          (html/create-attrs
@@ -279,9 +279,9 @@
          "</a>"))
 
      (defn norg/export/linkable
-       [target node]
+       [ctx target node]
        (match target
-         [:app app]     (_neorg/export/linkable :html app node)
+         [:app app]     (_neorg/export/linkable ctx :html app node)
          [:local local] (norg/export/linkable-local local node)
          (error "invalid link target")))
 
@@ -297,12 +297,12 @@
        :strikethrough (attached-modifier :span {:class "strikethrough"})
        :verbatim (attached-modifier :code)
        :link (let [target (norg/parse/target (inline :target))]
-               (norg/export/linkable target inline))
+               (norg/export/linkable ctx target inline))
        :anchor (let [target (inline :target)
                      target (if target
                               (norg/parse/target target)
                               (norg/resolve-anchor ctx inline))]
-                 (norg/export/linkable target inline))
+                 (norg/export/linkable ctx target inline))
        "TODO_INLINE")))
 
 (defn norg/export/inline
