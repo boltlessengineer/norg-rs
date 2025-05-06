@@ -14,34 +14,60 @@
       (string acc " " attr `="` value `"`))
     ""
     (map (fn [[x y]] [x y]) (pairs attrs))))
+(defn- html/merge-attrs
+  [& tables]
+  (def merged @{})
+  (each tbl tables
+    (if tbl
+      (loop [[k v] :pairs tbl]
+        (def k (keyword k))
+        (if (string? (merged k))
+          (put merged k (string (merged k) " " v))
+          (put merged k v)))))
+  merged)
 
-# (defn neorg/query-documents
-#   "query norg documents"
-#   [query]
-#   (error "neorg/query-documents is not yet implemented"))
+(defn- parse-attrs [attr-list]
+  (def attrs @{})
+  (if attr-list
+    (each attr attr-list
+      (match attr
+        [key value] (put attrs key value)
+        [key] (put attrs key true))))
+  attrs)
+
+(defn- filter-attrs [lang attrs]
+  (def prefix (string lang "."))
+  (def filtered @{})
+  (loop [[key value] :pairs attrs]
+    (if (string/has-prefix? prefix key)
+      (put filtered (string/slice key 5) value)))
+  filtered)
 
 # HACK: I think we should provide "neorg" as a janet package instead
-(defn- _neorg/resolve-link-target
-  [target]
-  ((compile ['neorg/export/path target])))
+(defn- _neorg/export/linkable
+  [lang app-target node]
+  # HACK: lazily found neorg/export/linkable
+  # I'm pretty sure there is better api than `compile`...
+  (def neorg/export/linkable ((compile 'neorg/export/linkable)))
+  (neorg/export/linkable lang app-target node))
 
-# (defn norg/parse/doc
-#   "parse document"
-#   [text]
-#   (cond
-#     (string? text) (error "todo")
-#     (array? text) (error "todo")
-#     (tuple? text) (error "todo")))
+(defn neorg/export/linkable
+  [lang app-target node]
+  (error "`neorg/export/linkable` is not yet implemented"))
 
-# (defn norg/parse/inline
-#   "parse inline text"
-#   [text]
-#   (error "todo"))
+(defn norg/resolve-anchor
+  "get rich target object from anchor node
+   receive `ctx` to access AST"
+  [ctx node]
+  (def neorg/resolve-anchor (compile 'neorg/resolve-anchor))
+  (def compile-success (function? neorg/resolve-anchor))
+  (if compile-success
+    ((neorg/resolve-anchor) ctx node)
+    [:local [:uri "#todo"]]))
 
-# (defn norg/parse/link
-#   "parse link target"
-#   [link]
-#   (error "todo"))
+# (defn neorg/resolve-anchor
+#   [path node]
+#   [:local [:uri "#todo-neorg"]])
 
 (defn- handle-atom
   [atom]
@@ -126,7 +152,7 @@
                      :s+
                      :scope-text)}))
 
-(defn norg/target/parse
+(defn norg/parse/target
   [text]
   ((peg/match target-peg text) 0))
 
@@ -153,21 +179,21 @@
   [{:kind :embed
     :export {:gfm (fn [ctx]
                     # TODO: find if there is a line starting with three or more backticks
+                    (def deli "```")
                     (string
-                      "```" (string/join params " ")
+                      deli (string/join params " ")
                       "\n"
                       (string/join lines)
-                      "```\n"))
+                      deli "\n"))
              :html (fn [ctx]
-                     (let [language (get params 0)]
-                       (string
-                         "<figure><pre><code"
-                         (if language
-                           (html/create-attrs {:class (string "language-" language)}))
-                         ">"
-                         # TODO: find if there is a line starting with three or more backticks
-                         ;(map html/escape lines)
-                         "</code></pre></figure>\n")))}}])
+                     (def language (get params 0))
+                     (string
+                       "<figure><pre><code"
+                       (if language
+                         (html/create-attrs {:class (string "language-" language)}))
+                       ">"
+                       ;(map html/escape lines)
+                       "</code></pre></figure>\n"))}}])
 
 (defn- norg/tag/tada
   [ctx params]
@@ -220,45 +246,45 @@
   "key is tuple of [:target :kind]"
   @{})
 
-(defn- parse-attrs [attr-list]
-  (def attrs @{})
-  (if attr-list
-    (each attr attr-list
-      (match attr
-        [key value] (put attrs key value)
-        [key] (put attrs key true))))
-  attrs)
-
-(defn- filter-attrs [lang attrs]
-  (def prefix (string lang "."))
-  (def filtered @{})
-  (loop [[key value] :pairs attrs]
-    (if (string/has-prefix? prefix key)
-      (put filtered (string/slice key 5) value)))
-  filtered)
-
-(defmacro norg/export/inline-html-impl []
+(defmacro- norg/export/inline-html-impl []
   '(do
-     (defn- merge-html-attrs
-         [& tables]
-         (def merged @{})
-         (each tbl tables
-           (if tbl
-             (loop [[k v] :pairs tbl]
-               (def k (keyword k))
-               (if (string? (merged k))
-                 (put merged k (string (merged k) " " v))
-                 (put merged k v)))))
-         merged)
      (defn attached-modifier
        [tag &opt attrs]
        (string
          "<" tag
          (html/create-attrs
-           (merge-html-attrs attrs (filter-attrs :html (parse-attrs (inline :attrs)))))
+           (html/merge-attrs attrs (filter-attrs :html (parse-attrs (inline :attrs)))))
          ">"
          ;(map |(norg/export/inline :html $ ctx) (inline :markup))
          "</" tag ">"))
+
+     # HACK: these are defined inside norg/export/inline to recursively call norg/export/inline.
+     # Move this out of here and use some macros to call norg/export/inline lazily.
+     (defn- norg/export/linkable-local
+       [local node]
+       (def markup (node :markup))
+       (def attrs (match local
+                   [:uri uri]       {:href uri}
+                   [:scopes scopes] {:href "#"}))
+       (string
+         "<a"
+         (html/create-attrs
+           (html/merge-attrs
+             attrs
+             (filter-attrs :html (parse-attrs (node :attrs)))))
+         ">"
+         (if markup
+           (string/join (map |(norg/export/inline :html $ ctx) markup))
+           (html/escape (attrs :href)))
+         "</a>"))
+
+     (defn norg/export/linkable
+       [target node]
+       (match target
+         [:app app]     (_neorg/export/linkable :html app node)
+         [:local local] (norg/export/linkable-local local node)
+         (error "invalid link target")))
+
      (case (inline :kind)
        :whitespace " "
        :softbreak "\n"
@@ -270,19 +296,13 @@
        :underline (attached-modifier :span {:class "underline"})
        :strikethrough (attached-modifier :span {:class "strikethrough"})
        :verbatim (attached-modifier :code)
-       :link (let [href (_neorg/resolve-link-target (inline :target))
-                   markup (inline :markup)
-                   attrs {:href href}]
-               (string
-                 "<a"
-                 (html/create-attrs
-                   (merge-html-attrs attrs (filter-attrs :html (parse-attrs (inline :attrs)))))
-                 ">"
-                 (if markup
-                   (string/join (map |(norg/export/inline :html $ ctx) markup))
-                   (html/escape href))
-                 "</a>"))
-       :anchor "TODO_ANCHOR"
+       :link (let [target (norg/parse/target (inline :target))]
+               (norg/export/linkable target inline))
+       :anchor (let [target (inline :target)
+                     target (if target
+                              (norg/parse/target target)
+                              (norg/resolve-anchor ctx inline))]
+                 (norg/export/linkable target inline))
        "TODO_INLINE")))
 
 (defn norg/export/inline
