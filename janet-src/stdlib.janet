@@ -55,20 +55,6 @@
   [ctx lang app-target node]
   (error "`neorg/export/linkable` is not yet implemented"))
 
-(defn norg/resolve-anchor
-  "get rich target object from anchor node
-   receive `ctx` to access AST"
-  [ctx node]
-  (def neorg/resolve-anchor (compile 'neorg/resolve-anchor))
-  (def compile-success (function? neorg/resolve-anchor))
-  (if compile-success
-    ((neorg/resolve-anchor) ctx node)
-    [:local [:uri "#todo"]]))
-
-# (defn neorg/resolve-anchor
-#   [path node]
-#   [:local [:uri "#todo-neorg"]])
-
 (defn- handle-atom
   [atom]
   (def atom (string/trim atom))
@@ -155,6 +141,21 @@
 (defn norg/parse/target
   [text]
   ((peg/match target-peg text) 0))
+
+(defn norg/resolve-anchor
+  "get rich target object from anchor node
+   receive `ctx` to access AST"
+  [ctx markup]
+  (def neorg/resolve-anchor (compile 'neorg/resolve-anchor))
+  (def compile-success (function? neorg/resolve-anchor))
+  (def markup "anchor")
+  (if compile-success
+    ((neorg/resolve-anchor) ctx markup)
+    (norg/parse/target ((ctx :anchors) markup))))
+
+# (defn neorg/resolve-anchor
+#   [path markup]
+#   [:local [:uri "#todo-neorg"]])
 
 (defn- norg/tag/image
   ".image implementation"
@@ -433,6 +434,7 @@
 (defn norg/export/doc
   [lang ast &opt ctx]
   (default ctx @{:meta @{}})
+  (put ctx :anchors (ast :anchors))
   (def res (string/join (map |(norg/export/block lang $ ctx)
-                           ast)))
+                           (ast :blocks))))
   [res ctx])

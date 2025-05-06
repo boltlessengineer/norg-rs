@@ -27,6 +27,21 @@ pub enum NorgLinkScope {
     WikiHeading(NorgMarkup),
 }
 
+impl Into<janetrs::JanetTuple<'_>> for NorgLinkTarget {
+    fn into(self) -> janetrs::JanetTuple<'static> {
+        match self {
+            Self::Local(local) => janetrs::tuple![
+                janetrs::JanetKeyword::new("local"),
+                janetrs::Janet::tuple(local.into()),
+            ],
+            Self::App(app) => janetrs::tuple![
+                janetrs::JanetKeyword::new("app"),
+                janetrs::Janet::structs(app.into()),
+            ],
+        }
+    }
+}
+
 impl TryFrom<janetrs::Janet> for NorgLinkTarget {
     type Error = janetrs::JanetConversionError;
 
@@ -47,6 +62,21 @@ impl TryFrom<janetrs::JanetTuple<'_>> for NorgLinkTarget {
             b"local" => Ok(Self::Local(NorgLinkLocalTarget::try_from(*value)?)),
             b"app" => Ok(Self::App(NorgLinkAppTarget::try_from(*value)?)),
             _ => todo!("error"),
+        }
+    }
+}
+
+impl Into<janetrs::JanetTuple<'_>> for NorgLinkLocalTarget {
+    fn into(self) -> janetrs::JanetTuple<'static> {
+        match self {
+            Self::Raw(raw) => janetrs::tuple![
+                janetrs::JanetKeyword::new("raw"),
+                janetrs::Janet::string(raw.into()),
+            ],
+            Self::Scope(_scopes) => janetrs::tuple![
+                janetrs::JanetKeyword::new("scopes"),
+                janetrs::tuple![],
+            ],
         }
     }
 }

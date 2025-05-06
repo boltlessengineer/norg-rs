@@ -7,7 +7,7 @@ use janetrs::{
 };
 use serde::Serialize;
 
-use crate::meta::NorgMeta;
+use crate::{meta::NorgMeta, parser::NorgAST};
 
 // TODO: implement compile_janet!("path/to/janet-file.janet");
 // which will marshal the janet code and expand as bytes
@@ -128,12 +128,12 @@ impl Exporter {
     pub fn export(
         &mut self,
         target: ExportTarget,
-        ast: Vec<crate::block::NorgBlock>,
+        ast: NorgAST,
         ctx: Option<ExportCtx>,
     ) -> Result<(String, ExportMeta), ExportError> {
         self.janet_client.add_def(DefOptions::new(
             "ast",
-            Janet::tuple(ast.into_iter().collect()),
+            Janet::structs(ast.into()),
         ));
         self.janet_client
             .add_def(DefOptions::new("lang", Janet::keyword(target.into())));

@@ -1,9 +1,60 @@
+use std::collections::HashMap;
+
 use crate::{
     block::{ListItem, NorgBlock},
-    inline::{Attribute, NorgInline},
+    inline::{Attribute, NorgInline}, target::NorgLinkTarget,
 };
 
-pub fn parse(text: &[u8]) -> Vec<NorgBlock> {
+pub type Markup = String;
+pub type AnchorMap = HashMap<Markup, String>;
+
+#[derive(Debug)]
+pub struct AnchorDefinitionNode {
+    // /// byte range
+    // pub range: Range<usize, usize>,
+    pub target: NorgLinkTarget,
+}
+
+#[derive(Debug)]
+pub struct NorgAST {
+    pub anchors: AnchorMap,
+    pub blocks: Vec<NorgBlock>,
+}
+
+impl Into<janetrs::JanetStruct<'_>> for AnchorDefinitionNode {
+    fn into(self) -> janetrs::JanetStruct<'static> {
+        janetrs::JanetStruct::builder(1)
+            .put(
+                janetrs::JanetKeyword::new("target"),
+                janetrs::Janet::tuple(self.target.into()),
+            )
+            .finalize()
+    }
+}
+
+impl Into<janetrs::JanetStruct<'_>> for NorgAST {
+    fn into(self) -> janetrs::JanetStruct<'static> {
+        janetrs::JanetStruct::builder(2)
+            .put(
+                janetrs::JanetKeyword::new("anchors"),
+                janetrs::Janet::table(
+                    self.anchors.into_iter().map(|(key, value)| {
+                        let key = janetrs::JanetString::from(key);
+                        let value = janetrs::JanetString::from(value);
+                        // let value: janetrs::JanetStruct = value.into();
+                        (key, value)
+                    }).collect()
+                )
+            )
+            .put(
+                janetrs::JanetKeyword::new("blocks"),
+                janetrs::Janet::tuple(self.blocks.into_iter().collect())
+            )
+            .finalize()
+    }
+}
+
+pub fn parse(text: &[u8]) -> NorgAST {
     let mut parser = tree_sitter::Parser::new();
     let language = tree_sitter_norg::LANGUAGE;
     parser
@@ -11,7 +62,9 @@ pub fn parse(text: &[u8]) -> Vec<NorgBlock> {
         .expect("Error loading Norg parser");
     let tree = parser.parse(&text, None).unwrap();
     let root = tree.root_node();
-    tsnode_to_blocks(root, text)
+    let mut anchors = HashMap::new();
+    let blocks = tsnode_to_blocks(&mut anchors, root, text);
+    NorgAST { anchors, blocks }
 }
 
 #[derive(Default)]
@@ -20,7 +73,7 @@ struct CarryoverScanner {
     attrs: Vec<Attribute>,
 }
 
-fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
+fn tsnode_to_blocks(anchors: &mut AnchorMap, node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
     let mut cursor = node.walk();
     let mut carryovers = CarryoverScanner::default();
     node.named_children(&mut cursor)
@@ -36,18 +89,18 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                         .len();
                     let title = heading_node
                         .child_by_field_name("title")
-                        .map(|node| tsnode_to_inlines(node, text));
+                        .map(|node| tsnode_to_inlines(anchors, node, text));
                     let attrs = get_attributes_from_tsnode(heading_node, text).unwrap_or(vec![]);
                     Some(NorgBlock::Section {
                         attrs,
                         level: prefix_count as u16,
                         heading: title,
-                        contents: tsnode_to_blocks(node, text),
+                        contents: tsnode_to_blocks(anchors, node, text),
                     })
                 }
                 "paragraph" => Some(NorgBlock::Paragraph {
                     attrs: std::mem::take(&mut carryovers.attrs),
-                    inlines: tsnode_to_inlines(node, text),
+                    inlines: tsnode_to_inlines(anchors, node, text),
                 }),
                 "infirm_tag" => {
                     let name = node
@@ -114,7 +167,7 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                             node.named_children(&mut cursor)
                                 .map(|node| ListItem {
                                     attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                                    contents: tsnode_to_blocks(node, text),
+                                    contents: tsnode_to_blocks(anchors, node, text),
                                 })
                                 .collect()
                         },
@@ -131,7 +184,7 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                             node.named_children(&mut cursor)
                                 .map(|node| ListItem {
                                     attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                                    contents: tsnode_to_blocks(node, text),
+                                    contents: tsnode_to_blocks(anchors, node, text),
                                 })
                                 .collect()
                         },
@@ -148,7 +201,7 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
                             node.named_children(&mut cursor)
                                 .map(|node| ListItem {
                                     attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                                    contents: tsnode_to_blocks(node, text),
+                                    contents: tsnode_to_blocks(anchors, node, text),
                                 })
                                 .collect()
                         },
@@ -174,7 +227,7 @@ fn tsnode_to_blocks(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgBlock> {
         .collect()
 }
 
-fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
+fn tsnode_to_inlines(anchors: &mut AnchorMap, node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
     let mut cursor = node.walk();
     use NorgInline::*;
     node.named_children(&mut cursor)
@@ -197,23 +250,23 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
             // TODO: add attributes
             "bold" => Some(Bold {
                 attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                markup: tsnode_to_inlines(node, text),
+                markup: tsnode_to_inlines(anchors, node, text),
             }),
             "italic" => Some(Italic {
                 attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                markup: tsnode_to_inlines(node, text),
+                markup: tsnode_to_inlines(anchors, node, text),
             }),
             "underline" => Some(Underline {
                 attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                markup: tsnode_to_inlines(node, text),
+                markup: tsnode_to_inlines(anchors, node, text),
             }),
             "strikethrough" => Some(Strikethrough {
                 attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                markup: tsnode_to_inlines(node, text),
+                markup: tsnode_to_inlines(anchors, node, text),
             }),
             "verbatim" => Some(Verbatim {
                 attrs: get_attributes_from_tsnode(node, text).unwrap_or(vec![]),
-                markup: tsnode_to_inlines(node, text),
+                markup: tsnode_to_inlines(anchors, node, text),
             }),
             "inline_macro" => {
                 let name = node
@@ -241,7 +294,7 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
                     .to_string();
                 let markup = node
                     .child_by_field_name("markup")
-                    .map(|node| tsnode_to_inlines(node, text));
+                    .map(|node| tsnode_to_inlines(anchors, node, text));
                 let attrs = get_attributes_from_tsnode(node, text).unwrap_or(vec![]);
                 Some(Link {
                     target,
@@ -253,7 +306,12 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
                 let target = node
                     .child_by_field_name("target")
                     .map(|node| node.utf8_text(text).unwrap().to_string());
-                let markup = tsnode_to_inlines(node.child_by_field_name("markup").unwrap(), text);
+                let markup_node = node.child_by_field_name("markup").unwrap();
+                if let Some(ref target) = target {
+                    let markup_text = markup_node.utf8_text(text).unwrap().to_string();
+                    anchors.insert(markup_text, target.clone());
+                }
+                let markup = tsnode_to_inlines(anchors, markup_node, text);
                 let attrs = get_attributes_from_tsnode(node, text).unwrap_or(vec![]);
                 Some(Anchor {
                     target,
