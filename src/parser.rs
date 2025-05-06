@@ -181,6 +181,7 @@ fn tsnode_to_inlines(node: tree_sitter::Node, text: &[u8]) -> Vec<NorgInline> {
         .map(|node| match node.kind() {
             "whitespace" => Some(Whitespace),
             "soft_break" => Some(SoftBreak),
+            "hard_break" => Some(HardBreak),
             "word" => {
                 let text = node.utf8_text(text).unwrap().to_string();
                 Some(Text(text))
