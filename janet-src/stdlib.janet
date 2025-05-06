@@ -296,11 +296,16 @@
        :underline (attached-modifier :span {:class "underline"})
        :strikethrough (attached-modifier :span {:class "strikethrough"})
        :verbatim (attached-modifier :code)
-       :link (let [target (norg/parse/target (inline :target))]
+       :link (let [target (inline :target)
+                   target (if (string? target)
+                            (norg/parse/target target)
+                            target)]
                (norg/export/linkable ctx target inline))
        :anchor (let [target (inline :target)
                      target (if target
-                              (norg/parse/target target)
+                              (if (string? target)
+                                (norg/parse/target target)
+                                target)
                               (norg/resolve-anchor ctx inline))]
                  (norg/export/linkable ctx target inline))
        "TODO_INLINE")))
