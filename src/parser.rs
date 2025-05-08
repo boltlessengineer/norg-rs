@@ -94,10 +94,10 @@ pub fn parse(text: &[u8]) -> NorgAST {
         .set_language(&language.into())
         .expect("Error loading Norg parser");
     let tree = parser.parse(&text, None).unwrap();
-    parse_tstree(tree, text)
+    parse_tstree(&tree, text)
 }
 
-pub fn parse_tstree(tree: tree_sitter::Tree, text: &[u8]) -> NorgAST {
+pub fn parse_tstree(tree: &tree_sitter::Tree, text: &[u8]) -> NorgAST {
     let root = tree.root_node();
     let mut anchors = HashMap::new();
     let blocks = tsnode_to_blocks(&mut anchors, root, text);
