@@ -8,7 +8,7 @@ use crate::{
 pub type Markup = String;
 pub type AnchorMap = HashMap<Markup, AnchorDefinitionNode>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AnchorDefinitionNode {
     /// byte range
     pub range: Range,
@@ -60,7 +60,7 @@ impl Into<janetrs::JanetStruct<'_>> for NorgAST {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Range {
     pub start: usize,
     pub end: usize,
