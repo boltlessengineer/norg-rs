@@ -2,17 +2,19 @@ use std::collections::HashMap;
 
 use crate::{
     block::{ListItem, NorgBlock},
-    inline::{Attribute, NorgInline}, target::NorgLinkTarget,
+    inline::{Attribute, NorgInline},
 };
 
 pub type Markup = String;
-pub type AnchorMap = HashMap<Markup, String>;
+pub type AnchorMap = HashMap<Markup, AnchorDefinitionNode>;
 
 #[derive(Debug)]
 pub struct AnchorDefinitionNode {
-    // /// byte range
-    // pub range: Range<usize, usize>,
-    pub target: NorgLinkTarget,
+    /// byte range
+    pub range: Range,
+    // TODO: change this to target::NorgLinkTarget when we start parsing target syntax from rust
+    // parser
+    pub target: String,
 }
 
 #[derive(Debug)]
@@ -23,11 +25,12 @@ pub struct NorgAST {
 
 impl Into<janetrs::JanetStruct<'_>> for AnchorDefinitionNode {
     fn into(self) -> janetrs::JanetStruct<'static> {
-        janetrs::JanetStruct::builder(1)
+        janetrs::JanetStruct::builder(2)
             .put(
                 janetrs::JanetKeyword::new("target"),
-                janetrs::Janet::tuple(self.target.into()),
+                janetrs::JanetString::from(self.target),
             )
+            .put(janetrs::JanetKeyword::new("range"), self.range)
             .finalize()
     }
 }
@@ -38,19 +41,49 @@ impl Into<janetrs::JanetStruct<'_>> for NorgAST {
             .put(
                 janetrs::JanetKeyword::new("anchors"),
                 janetrs::Janet::table(
-                    self.anchors.into_iter().map(|(key, value)| {
-                        let key = janetrs::JanetString::from(key);
-                        let value = janetrs::JanetString::from(value);
-                        // let value: janetrs::JanetStruct = value.into();
-                        (key, value)
-                    }).collect()
-                )
+                    self.anchors
+                        .into_iter()
+                        .map(|(key, value)| {
+                            let key = janetrs::JanetString::from(key);
+                            // let value = janetrs::JanetString::from(value);
+                            let value: janetrs::JanetStruct = value.into();
+                            (key, value)
+                        })
+                        .collect(),
+                ),
             )
             .put(
                 janetrs::JanetKeyword::new("blocks"),
-                janetrs::Janet::tuple(self.blocks.into_iter().collect())
+                janetrs::Janet::tuple(self.blocks.into_iter().collect()),
             )
             .finalize()
+    }
+}
+
+#[derive(Debug)]
+pub struct Range {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl From<tree_sitter::Range> for Range {
+    fn from(value: tree_sitter::Range) -> Self {
+        Self {
+            start: value.start_byte,
+            end: value.end_byte,
+        }
+    }
+}
+
+impl Into<janetrs::Janet> for Range {
+    fn into(self) -> janetrs::Janet {
+        janetrs::Janet::tuple(self.into())
+    }
+}
+
+impl Into<janetrs::JanetTuple<'_>> for Range {
+    fn into(self) -> janetrs::JanetTuple<'static> {
+        janetrs::tuple![self.start, self.end]
     }
 }
 
@@ -61,6 +94,10 @@ pub fn parse(text: &[u8]) -> NorgAST {
         .set_language(&language.into())
         .expect("Error loading Norg parser");
     let tree = parser.parse(&text, None).unwrap();
+    parse_tstree(tree, text)
+}
+
+pub fn parse_tstree(tree: tree_sitter::Tree, text: &[u8]) -> NorgAST {
     let root = tree.root_node();
     let mut anchors = HashMap::new();
     let blocks = tsnode_to_blocks(&mut anchors, root, text);
@@ -306,10 +343,17 @@ fn tsnode_to_inlines(anchors: &mut AnchorMap, node: tree_sitter::Node, text: &[u
                 let target = node
                     .child_by_field_name("target")
                     .map(|node| node.utf8_text(text).unwrap().to_string());
+                let range: Range = node.range().into();
                 let markup_node = node.child_by_field_name("markup").unwrap();
                 if let Some(ref target) = target {
                     let markup_text = markup_node.utf8_text(text).unwrap().to_string();
-                    anchors.insert(markup_text, target.clone());
+                    anchors.insert(
+                        markup_text,
+                        AnchorDefinitionNode {
+                            range,
+                            target: target.clone(),
+                        },
+                    );
                 }
                 let markup = tsnode_to_inlines(anchors, markup_node, text);
                 let attrs = get_attributes_from_tsnode(node, text).unwrap_or(vec![]);

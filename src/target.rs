@@ -27,6 +27,12 @@ pub enum NorgLinkScope {
     WikiHeading(NorgMarkup),
 }
 
+impl Into<janetrs::Janet> for NorgLinkTarget {
+    fn into(self) -> janetrs::Janet {
+        janetrs::Janet::tuple(self.into())
+    }
+}
+
 impl Into<janetrs::JanetTuple<'_>> for NorgLinkTarget {
     fn into(self) -> janetrs::JanetTuple<'static> {
         match self {

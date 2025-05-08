@@ -151,7 +151,10 @@
   (def markup "anchor")
   (if compile-success
     ((neorg/resolve-anchor) ctx markup)
-    (norg/parse/target ((ctx :anchors) markup))))
+    (let [anchors (ctx :anchors)
+          anchor-def-node (anchors markup)
+          target (anchor-def-node :target)]
+      (norg/parse/target target))))
 
 # (defn neorg/resolve-anchor
 #   [path markup]
