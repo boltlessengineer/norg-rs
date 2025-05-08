@@ -12,7 +12,7 @@ itertools = "0.14.0"
 janetrs = { git = "https://github.com/boltlessengineer/janetrs", branch = "feat/unmarshal" }
 # janetrs = { path = "../../repo/janetrs" }
 serde = { version = "1.0.219", features = ["derive"] }
-tree-sitter = { version = "0.25.3", features = [ "wasm" ] }
+tree-sitter = { version = "0.25.3" }
 tree-sitter-norg = { git = "https://github.com/boltlessengineer/tree-sitter-norg3-pr1", branch = "experiment" }
 unicode_categories = "0.1.1"
 
