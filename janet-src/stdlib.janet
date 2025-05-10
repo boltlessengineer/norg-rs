@@ -406,25 +406,28 @@
     hook (hook block ctx)
     (= (block :kind) :embed) (((block :export) :html) ctx)
     (= (block :kind) :infirm-tag) (let [name (block :name)
-                                        params (string/split ";" (block :params))
+                                        # HACK: stupid. should parse these from tree-sitter parser
+                                        params (if params
+                                                 (string/split ";" params)
+                                                 @[])
                                         tag (norg/ast/tag name)]
                                     (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
                                     (def ast (tag ctx params))
                                     (string/join (map |(norg/export/block lang $ ctx) ast)))
     (= (block :kind) :ranged-tag) (let [name (block :name)
-                                        # HACK: stupid. should parse these from tree-sitter parser
                                         params (block :params)
-                                        params (if params params "")
-                                        params (string/split ";" params)
+                                        params (if params
+                                                 (string/split ";" params)
+                                                 @[])
                                         lines (block :content)
                                         tag (norg/ast/tag name)]
                                     (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
                                     (def ast (tag ctx params lines))
                                     (string/join (map |(norg/export/block lang $ ctx) ast)))
     (= (block :kind) :carryover-tag) (let [name (block :name)
-                                           params (block :params)
-                                           params (if params params "")
-                                           params (string/split ";" params)
+                                           params (if params
+                                                    (string/split ";" params)
+                                                    @[])
                                            target (block :target)
                                            tag (norg/ast/tag name)]
                                        (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
