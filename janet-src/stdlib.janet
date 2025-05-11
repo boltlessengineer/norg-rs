@@ -34,6 +34,17 @@
         [key value] (put attrs key value)
         [key] (put attrs key true))))
   attrs)
+(defn- attrs/get-todo [attr-list]
+  (cond
+    (not (indexed? attr-list)) nil
+    (has-value? attr-list []) :undone
+    (has-value? attr-list ["x"]) :done
+    (has-value? attr-list ["?"]) :uncertain
+    (has-value? attr-list ["!"]) :urgent
+    (has-value? attr-list ["+"]) :recurring
+    (has-value? attr-list ["-"]) :pending
+    (has-value? attr-list ["="]) :on-hold
+    (has-value? attr-list ["_"]) :canceled))
 
 (defn- filter-attrs [lang attrs]
   (def prefix (string lang "."))
@@ -384,14 +395,21 @@
                       (map |(norg/export/block :html $ ctx) ($ :contents)))
                     items)
               "</blockquote>\n"))
-     :list-item (let [contents (block :contents)]
-                 (string
-                   "<li"
-                   (html/create-attrs
-                     (filter-attrs :html (parse-attrs (block :attrs))))
-                   ">\n"
-                   ;(map |(norg/export/block :html $ ctx) contents)
-                   "</li>\n"))
+     :list-item (let [contents (block :contents)
+                      attrs (block :attrs)]
+                  (string
+                    "<li"
+                    (html/create-attrs
+                      (filter-attrs :html (parse-attrs attrs)))
+                    ">\n"
+                    (if-let [todo (attrs/get-todo attrs)]
+                      (string
+                        `<input `
+                        (if (= todo :done)
+                          `checked="" `)
+                        `disabled="" type="checkbox">`))
+                    ;(map |(norg/export/block :html $ ctx) contents)
+                    "</li>\n"))
      :horizontal-line (string
                         "<hr"
                         (html/create-attrs
