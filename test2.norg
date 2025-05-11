@@ -15,3 +15,9 @@ I expect linkable here: [anchor]
 ~ (x) asdf
 ~ ( ) asdf
 ~ ( ) asdf
+
+@embed html
+<div style="text-align: center">
+hello
+</div>
+@end

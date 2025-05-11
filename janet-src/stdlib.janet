@@ -210,6 +210,14 @@
                        ;(map html/escape lines)
                        "</code></pre></figure>\n"))}}])
 
+(defn- norg/tag/embed
+  [ctx params lines]
+  (def lang (params 0))
+  [{:kind :embed
+    :export {(keyword lang)
+             (fn [ctx]
+               (string/join lines))}}])
+
 (defn- norg/tag/tada
   [ctx params]
   [{:kind :paragraph
@@ -254,6 +262,7 @@
     "code" norg/tag/code
     "eval" norg/tag/eval
     "document.meta" norg/tag/document.meta
+    "embed" norg/tag/embed
     "tada" norg/tag/tada
     "\\img" norg/inline-tag/img})
 
