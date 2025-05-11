@@ -9,6 +9,8 @@ asdf
 
 I expect linkable here: [anchor-text]
 
+and here: [neorg]
+
 - adsf
 
 ~ ( ) asdf
@@ -21,3 +23,6 @@ I expect linkable here: [anchor-text]
 hello
 </div>
 @end
+
+#(html.display none)
+- [neorg]{https://github.com/nvim-neorg/neorg}

@@ -196,7 +196,8 @@ fn tsnode_to_blocks(anchors: &mut AnchorMap, node: tree_sitter::Node, text: &[u8
                     let prefix_node = node.child(0).unwrap().child(0).unwrap();
                     let prefix_count = prefix_node.utf8_text(text).unwrap().len();
                     Some(NorgBlock::UnorderedList {
-                        attrs: vec![],
+                        // TODO: this way won't work with tags
+                        attrs: std::mem::take(&mut carryovers.attrs),
                         level: prefix_count as u16,
                         items: {
                             let mut cursor = node.walk();
@@ -213,7 +214,7 @@ fn tsnode_to_blocks(anchors: &mut AnchorMap, node: tree_sitter::Node, text: &[u8
                     let prefix_node = node.child(0).unwrap().child(0).unwrap();
                     let prefix_count = prefix_node.utf8_text(text).unwrap().len();
                     Some(NorgBlock::OrderedList {
-                        attrs: vec![],
+                        attrs: std::mem::take(&mut carryovers.attrs),
                         level: prefix_count as u16,
                         items: {
                             let mut cursor = node.walk();
@@ -230,7 +231,7 @@ fn tsnode_to_blocks(anchors: &mut AnchorMap, node: tree_sitter::Node, text: &[u8
                     let prefix_node = node.child(0).unwrap().child(0).unwrap();
                     let prefix_count = prefix_node.utf8_text(text).unwrap().len();
                     Some(NorgBlock::Quote {
-                        attrs: vec![],
+                        attrs: std::mem::take(&mut carryovers.attrs),
                         level: prefix_count as u16,
                         items: {
                             let mut cursor = node.walk();
