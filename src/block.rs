@@ -11,6 +11,10 @@ pub enum NorgBlock {
     Section {
         attrs: Vec<Attribute>,
         level: u16,
+        // TODO: use Heading type instead
+        // so that attributes in `* (this) heading` form applied to the heading
+        // instead of entire section.
+        // Section's attributes can only be applied with `#(this)` syntax
         heading: Option<Vec<NorgInline>>,
         contents: Vec<Self>,
     },

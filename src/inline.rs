@@ -6,7 +6,7 @@ use janetrs::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum Attribute {
     Blank,
     Key(String),
@@ -60,7 +60,7 @@ impl Into<Janet> for Attribute {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum NorgInline {
     Text(String),
     Special(String),
@@ -103,6 +103,7 @@ pub enum NorgInline {
     Anchor {
         target: Option<String>,
         markup: Vec<Self>,
+        hash: u64,
         attrs: Vec<Attribute>,
     },
     // TODO: embed
@@ -237,6 +238,15 @@ impl TryFrom<Janet> for NorgInline {
                     b"anchor" => Ok(NorgInline::Anchor {
                         target,
                         markup: markup.ok_or(JanetConversionError::Other)?,
+                        hash: {
+                            let hash = value
+                                .get(JanetKeyword::new(b"hash"))
+                                .ok_or(JanetConversionError::Other)?;
+                            match hash.unwrap() {
+                                TaggedJanet::Number(num) => num as u64,
+                                _ => todo!("error"),
+                            }
+                        },
                         attrs,
                     }),
                     _ => unreachable!(),
@@ -344,9 +354,11 @@ impl Into<Janet> for NorgInline {
             Anchor {
                 target,
                 markup,
+                hash,
                 attrs,
-            } => JanetStruct::builder(4)
+            } => JanetStruct::builder(5)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"anchor"))
+                .put(JanetKeyword::new(b"hash"), hash)
                 .put(
                     JanetKeyword::new(b"markup"),
                     Janet::tuple(markup.into_iter().collect()),

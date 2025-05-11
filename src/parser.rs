@@ -1,12 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::{DefaultHasher, Hash as _, Hasher as _}};
 
 use crate::{
     block::{ListItem, NorgBlock},
     inline::{Attribute, NorgInline},
 };
 
-pub type Markup = String;
-pub type AnchorMap = HashMap<Markup, AnchorDefinitionNode>;
+// pub type Markup = String;
+pub type AnchorMap = HashMap<u64, AnchorDefinitionNode>;
 
 #[derive(Debug, Clone)]
 pub struct AnchorDefinitionNode {
@@ -44,7 +44,6 @@ impl Into<janetrs::JanetStruct<'_>> for NorgAST {
                     self.anchors
                         .into_iter()
                         .map(|(key, value)| {
-                            let key = janetrs::JanetString::from(key);
                             // let value = janetrs::JanetString::from(value);
                             let value: janetrs::JanetStruct = value.into();
                             (key, value)
@@ -345,20 +344,25 @@ fn tsnode_to_inlines(anchors: &mut AnchorMap, node: tree_sitter::Node, text: &[u
                     .map(|node| node.utf8_text(text).unwrap().to_string());
                 let range: Range = node.range().into();
                 let markup_node = node.child_by_field_name("markup").unwrap();
+                let markup = tsnode_to_inlines(anchors, markup_node, text);
+                let hash = {
+                    let mut hasher = DefaultHasher::new();
+                    markup.hash(&mut hasher);
+                    hasher.finish()
+                };
                 if let Some(ref target) = target {
-                    let markup_text = markup_node.utf8_text(text).unwrap().to_string();
                     anchors.insert(
-                        markup_text,
+                        hash,
                         AnchorDefinitionNode {
                             range,
                             target: target.clone(),
                         },
                     );
                 }
-                let markup = tsnode_to_inlines(anchors, markup_node, text);
                 let attrs = get_attributes_from_tsnode(node, text).unwrap_or(vec![]);
                 Some(Anchor {
                     target,
+                    hash,
                     markup,
                     attrs,
                 })

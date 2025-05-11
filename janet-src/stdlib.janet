@@ -156,14 +156,14 @@
 (defn norg/resolve-anchor
   "get rich target object from anchor node
    receive `ctx` to access AST"
-  [ctx markup]
+  [ctx node]
+  (def hash (node :hash))
   (def neorg/resolve-anchor (compile 'neorg/resolve-anchor))
   (def compile-success (function? neorg/resolve-anchor))
-  (def markup "anchor")
   (if compile-success
-    ((neorg/resolve-anchor) ctx markup)
+    ((neorg/resolve-anchor) ctx node)
     (let [anchors (ctx :anchors)
-          anchor-def-node (anchors markup)
+          anchor-def-node (anchors hash)
           target (anchor-def-node :target)]
       (norg/parse/target target))))
 

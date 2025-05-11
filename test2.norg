@@ -5,9 +5,9 @@ asdf
 asdf
 @end
 
-[anchor]{definition}
+[anchor-text]{definition}
 
-I expect linkable here: [anchor]
+I expect linkable here: [anchor-text]
 
 - adsf
 
