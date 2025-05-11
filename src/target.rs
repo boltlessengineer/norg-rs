@@ -177,15 +177,13 @@ impl TryFrom<janetrs::JanetStruct<'_>> for NorgLinkAppTarget {
         let path = value
             .get(janetrs::JanetKeyword::new("path"))
             .unwrap()
-            .try_unwrap::<janetrs::JanetString>()
-            .unwrap()
+            .try_unwrap::<janetrs::JanetString>()?
             .to_path_lossy()
             .to_path_buf();
         let scopes = value
             .get(janetrs::JanetKeyword::new("scopes"))
             .unwrap()
-            .try_unwrap::<janetrs::JanetTuple>()
-            .unwrap()
+            .try_unwrap::<janetrs::JanetTuple>()?
             .into_iter()
             .map(NorgLinkScope::try_from)
             .collect::<Result<_, _>>()?;
@@ -214,9 +212,12 @@ impl TryFrom<janetrs::JanetTuple<'_>> for NorgLinkScope {
         };
         let values = &value.as_ref()[1..];
         let kind = kind.try_unwrap::<janetrs::JanetKeyword>()?;
-        // TODO: I'm too lazy to implement these
         match kind.as_bytes() {
-            b"heading" => todo!(),
+            b"heading" => Ok({
+                let level = values[0].try_unwrap::<f64>()? as u16;
+                let title = values[1].to_string();
+                Self::Heading(level, title)
+            }),
             b"wiki" => todo!(),
             _ => todo!("error"),
         }

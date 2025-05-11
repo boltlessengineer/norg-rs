@@ -113,11 +113,14 @@
 (defn- app-target
   [& args]
   [:app (match args
-          [[:workspace workspace] path scopes] {:workspace workspace
-                                                :path path
-                                                :scopes scopes}
-          [path scopes] {:path path
-                         :scopes scopes})])
+          [[:workspace workspace]
+           path
+           [:scopes scopes]] {:workspace workspace
+                              :path path
+                              :scopes scopes}
+          [path
+           [:scopes scopes]] {:path path
+                              :scopes scopes})])
 
 (def target-peg
   (peg/compile
@@ -126,7 +129,7 @@
                  :sep
                  :scope-text
                  (+ (* :sep :scopes)
-                    (constant [])))
+                    (constant [:scopes []])))
               ,app-target)
       :local (/ (+ :scopes :uri)
                 ,|[:local $])
@@ -153,6 +156,10 @@
   [text]
   ((peg/match target-peg text) 0))
 
+# TODO: add test for this case:
+# (pp (norg/parse/target ":asdf:* heading:** heading"))
+# (pp (norg/parse/target "* heading"))
+
 (defn norg/resolve-anchor
   "get rich target object from anchor node
    receive `ctx` to access AST"
@@ -162,10 +169,13 @@
   (def compile-success (function? neorg/resolve-anchor))
   (if compile-success
     ((neorg/resolve-anchor) ctx node)
-    (let [anchors (ctx :anchors)
-          anchor-def-node (anchors hash)
-          target (anchor-def-node :target)]
-      (norg/parse/target target))))
+    (let [anchors (ctx :anchors)]
+      (def anchor-def-node (anchors hash))
+      (if anchor-def-node
+        (norg/parse/target (anchor-def-node :target))
+        (do
+          (print "warn: missing anchor")
+          [:local [:uri "#missing-anchor"]])))))
 
 # (defn neorg/resolve-anchor
 #   [path markup]
