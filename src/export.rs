@@ -1,9 +1,7 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use janetrs::{
-    Janet, JanetConversionError,
-    client::JanetClient,
-    env::{DefOptions, JanetEnvironment},
+    client::JanetClient, env::{CFunOptions, DefOptions, JanetEnvironment}, Janet, JanetConversionError
 };
 use serde::Serialize;
 
@@ -114,7 +112,23 @@ impl Exporter {
     pub fn new() -> Self {
         let client = JanetClient::init().unwrap();
         let norg_env: janetrs::JanetTable = client.unmarshal(NEORG_IMAGE_EMBED).try_into().unwrap();
-        let janet_client = client.load_env(JanetEnvironment::new(norg_env));
+        let mut janet_client = client.load_env(JanetEnvironment::new(norg_env));
+
+        #[janetrs::janet_fn]
+        fn norg_parse(args: &mut [Janet]) -> Janet {
+            use janetrs::JanetArgs as _;
+            use janetrs::{JanetType, TaggedJanet};
+
+            let content = match args.get_tagged_matches(0, &[JanetType::Buffer, JanetType::String]) {
+                TaggedJanet::Buffer(b) => b.as_bytes().to_vec(),
+                TaggedJanet::String(s) => s.as_bytes().to_vec(),
+                _ => unreachable!("Already checked to be a buffer|string"),
+            };
+            let ast = crate::parser::parse(&content);
+            Janet::structs(ast.into())
+        }
+
+        janet_client.add_c_fn(CFunOptions::new(c"norg/parse", norg_parse_c));
         Self { janet_client }
     }
 

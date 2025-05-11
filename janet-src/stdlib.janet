@@ -173,7 +173,9 @@
 
 (defn- norg/tag/image
   ".image implementation"
-  [ctx [src]]
+  [ctx params]
+  (def src (params 0))
+  (def alt-text (get params 1))
   [{:kind :embed
     :export {:gfm (fn [ctx]
                     (string
@@ -185,8 +187,15 @@
              :html (fn [ctx]
                      (string
                        "<figure><img"
+                       # TODO: alt text
                        (html/create-attrs {:src src})
-                       "></figure>\n"))}}])
+                       ">"
+                       (if alt-text
+                         (string
+                           "<figcaption>"
+                           (html/escape alt-text)
+                           "</figcaption>"))
+                       "</figure>\n"))}}])
 
 (defn- norg/tag/code
   # TODO: find better way to pass "lines" parameter
@@ -473,3 +482,21 @@
   (def res (string/join (map |(norg/export/block lang $ ctx)
                            (ast :blocks))))
   [res ctx])
+
+(defn- norg/tag/details
+  [ctx params lines]
+  (def norg/parse ((compile 'norg/parse)))
+  (def ast (norg/parse (string/join lines)))
+  [{:kind :embed
+    :export {:html (fn [ctx]
+                     (string
+                       "<details>"
+                       "<summary>"
+                       (params 0)
+                       "</summary>"
+                       # TODO: parse given text and export it to html
+                       ;(map |(norg/export/block :html $ ctx)
+                             (ast :blocks))
+                       "</details>"))}}])
+
+(put norg/ast/tag "details" norg/tag/details)
