@@ -51,7 +51,7 @@
   (def filtered @{})
   (loop [[key value] :pairs attrs]
     (if (string/has-prefix? prefix key)
-      (put filtered (string/slice key 5) value)))
+      (put filtered (string/slice key (length prefix)) value)))
   filtered)
 
 # HACK: I think we should provide "neorg" as a janet package instead
