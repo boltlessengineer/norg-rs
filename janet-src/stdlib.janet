@@ -407,6 +407,7 @@
     (= (block :kind) :embed) (((block :export) :html) ctx)
     (= (block :kind) :infirm-tag) (let [name (block :name)
                                         # HACK: stupid. should parse these from tree-sitter parser
+                                        params (block :params)
                                         params (if params
                                                  (string/split ";" params)
                                                  @[])
@@ -425,6 +426,7 @@
                                     (def ast (tag ctx params lines))
                                     (string/join (map |(norg/export/block lang $ ctx) ast)))
     (= (block :kind) :carryover-tag) (let [name (block :name)
+                                           params (block :params)
                                            params (if params
                                                     (string/split ";" params)
                                                     @[])
