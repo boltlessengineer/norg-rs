@@ -274,6 +274,29 @@
                        (html/create-attrs {:src src})
                        ">"))}}])
 
+(defn- norg/inline-tag/fn
+  [ctx params markup]
+  (def linkable
+    (if (or (nil? markup) (empty? markup))
+      # TODO: actually link to footnote definition
+      # new fact: we need to handle when anchor definition is under
+      # tag expansion result.
+      # which cannot be provided from parser
+      # anchors should link each other using special hashing function instead.
+      # this can allow HTML exporter to use human readable hashtag id urls
+      {:kind :link
+       :attrs [["id" (string "footnote-ref-" (params 0))]]
+       :target (string "#footnote-" (params 0))}
+      {:kind :anchor
+       :attrs [["id" "footnote-ref"]]
+       :markup markup}))
+  [linkable])
+
+(defn- norg/tag/footnote
+  [ctx [id content]]
+  (print "warn: footnote tag is not yet implemented")
+  [])
+
 # tables where Neorg can register dynamically
 (def norg/ast/tag
   "name tag with \\ prefix to add as inline tag"
@@ -283,7 +306,9 @@
     "document.meta" norg/tag/document.meta
     "embed" norg/tag/embed
     "tada" norg/tag/tada
-    "\\img" norg/inline-tag/img})
+    "footnote" norg/tag/footnote
+    "\\img" norg/inline-tag/img
+    "\\fn" norg/inline-tag/fn})
 
 (def norg/export-hook
   "key is tuple of [:target :kind]"
@@ -360,8 +385,8 @@
     hook (hook inline ctx)
     (= (inline :kind) :embed) (((inline :export) :html) ctx)
     (= (inline :kind) :macro) (let [name (inline :name)
-                                    params (parse-attrs (inline :attrs))
-                                    markup []
+                                    params (inline :attrs)
+                                    markup (inline :markup)
                                     tag (norg/ast/tag (string "\\" name))]
                                 (unless (truthy? tag) (error (string "tag '" name "' doesn't exist")))
                                 (def ast (tag ctx params markup))
