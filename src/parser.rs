@@ -320,7 +320,10 @@ fn tsnode_to_inlines(anchors: &mut AnchorMap, node: tree_sitter::Node, text: &[u
                             .map(|attr| attr.utf8_text(text).unwrap().to_string())
                             .collect()
                     });
-                Some(Macro { name, attrs })
+                let markup = node
+                    .child_by_field_name("markup")
+                    .map(|node| tsnode_to_inlines(anchors, node, text));
+                Some(Macro { name, markup, attrs })
             }
             "link" => {
                 let target = node

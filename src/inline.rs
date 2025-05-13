@@ -91,7 +91,7 @@ pub enum NorgInline {
     // TODO: rename this to "InlineTag"
     Macro {
         name: String,
-        // markup: Option<Vec<NorgInline>>,
+        markup: Option<Vec<NorgInline>>,
         attrs: Option<Vec<String>>,
         // TODO: add attributes and markup parameter
     },
@@ -193,6 +193,17 @@ impl TryFrom<Janet> for NorgInline {
                     .ok_or(JanetConversionError::Other)?
                     .try_unwrap::<JanetString>()?
                     .to_string(),
+                markup: value.get(JanetKeyword::new(b"markup")).and_then(|inlines| {
+                    match inlines.unwrap() {
+                        TaggedJanet::Tuple(inlines) => Some(
+                            inlines
+                                .iter()
+                                .map(|&inline| inline.try_into().unwrap())
+                                .collect(),
+                        ),
+                        _ => None,
+                    }
+                }),
                 attrs: value
                     .get(JanetKeyword::new(b"attrs"))
                     .and_then(|attr| match attr.unwrap() {
@@ -340,9 +351,16 @@ impl Into<Janet> for NorgInline {
                     Janet::tuple(attrs.into_iter().collect()),
                 )
                 .finalize(),
-            Macro { name, attrs } => JanetStruct::builder(3)
+            Macro { name, markup, attrs } => JanetStruct::builder(4)
                 .put(JanetKeyword::new(b"kind"), JanetKeyword::new(b"macro"))
                 .put(JanetKeyword::new(b"name"), JanetString::new(&name))
+                .put(
+                    JanetKeyword::new(b"markup"),
+                    match markup {
+                        Some(markup) => Janet::tuple(markup.into_iter().collect()),
+                        None => Janet::nil(),
+                    },
+                )
                 .put(
                     JanetKeyword::new(b"attrs"),
                     match attrs {
