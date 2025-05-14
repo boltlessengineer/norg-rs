@@ -359,6 +359,7 @@
        :hardbreak "<br>"
        :text (html/escape (inline :text))
        :special (html/escape (inline :special))
+       :escape (html/escape (inline :escape))
        :bold (attached-modifier :strong)
        :italic (attached-modifier :em)
        :underline (attached-modifier :span {:class "underline"})
