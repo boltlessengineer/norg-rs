@@ -1,9 +1,9 @@
-use norg_rs::export::{ExportTarget, Exporter};
-
 fn main() {
-    let text = std::fs::read("test2.norg").unwrap();
-    let ast = norg_rs::parser::parse(&text);
-    let mut exporter = Exporter::new();
-    let (res, _meta) = exporter.export(ExportTarget::Html, ast, None).unwrap();
-    println!("{res}");
+    // let text = std::fs::read_to_string("test2.norg").unwrap();
+    // let ast = norg_syntax::parse(&text);
+    // dbg!(ast);
+    let text = "asdf:[asdf]";
+    let inline_ast = norg_syntax::parse_inline(text);
+    println!("from: {text}");
+    dbg!(inline_ast);
 }

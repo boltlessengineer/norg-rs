@@ -1,28 +1,12 @@
 * heading
-paragraph *bold*
-- @code
-asdf
-asdf
-@end
-
-[anchor-text]{definition}
-
-I expect linkable here: [anchor-text]
-
-and here: [neorg]
-
-- adsf
-
-~ ( ) asdf
-~ (x) asdf
-~ ( ) asdf
-~ ( ) asdf
-
-@embed html
-<div style="text-align: center">
-hello
-</div>
-@end
-
-#(html.display none)
-- [neorg]{https://github.com/nvim-neorg/neorg}
+  paragraph
+** heading
+   paragraph
+** heading
+   paragraph
+**
+  paragraph
+  - asdf
+  / @asdf adsf;
+    @end
+  - asdf

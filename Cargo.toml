@@ -5,9 +5,13 @@ edition = "2021"
 
 [workspace]
 resolver = "2"
-members = ["bindings/js"]
+members = [
+    "crates/*",
+    "bindings/js",
+]
 
 [dependencies]
+norg-syntax = { path = "crates/norg-syntax" }
 itertools = "0.14.0"
 janetrs = { git = "https://github.com/boltlessengineer/janetrs", branch = "feat/unmarshal" }
 # janetrs = { path = "../../repo/janetrs" }

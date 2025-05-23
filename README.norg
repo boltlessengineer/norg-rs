@@ -58,3 +58,24 @@ Text -(rust)-> Vec<Block> -(janet)-> Other spec
 - ( ) package to wasm
 -- ( ) rewrite parser from scratch in rust to replace tree-sitter parser
 - (?) change `{:kind kind ...}` to `[kind ...]`
+
+- `fn` inline tag will create local link with footnote identifier
+- `@footnote` tag will create local targetable object with
+
+~ parse document
+~ expand all tags (including inline tags) and collect `MarkupHash -> LinkTarget` table.
+~ pass expanded AST & `MarkupHash -> LinkTarget` table to exporter
+~ exporter will first resolve anchor with given anchor-table
+~ and then find for `Location` for each `LinkTarget`:s
+~ cache them in NorgBerg with targetted file sha for later use
+
+So my actual TODO is:
+
+~ ( ) rewrite Node types (to always include `range` field)
+- ( ) rewrite ASTNode types to include `attributes` field (actually no, just put it on individual nodes)
+~ ( ) split `(norg/export/doc)` to `(norg/expand/ast)` and `(norg/export/ast)`
+>> `(norg/expand/ast)` will return
+~~~ ast (`Vec<Block>`)
+~~~ anchor-table (`HashMap<Markup, LinkTarget>`)
+~ ( ) implement `(norg/find/ast)` to search for a node (query node by structural position or anchor definition hashid)
+~ ( ) using all these, refactor entire export system
