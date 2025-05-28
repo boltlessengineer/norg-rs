@@ -1,0 +1,46 @@
+
+link location syntax:
+
+@code
+:$workspace/asdf:* heading:** heading
+
+(applink
+  (applink_prefix)
+  workspace: (workspace
+               (workspace_prefix)
+               name: (text))
+  path: (text)
+  (scope_delmiter)
+  scope: (scope
+           (heading_prefix)
+           (text))
+  (scope_delmiter)
+  scope: (scope
+           (heading_prefix)
+           (text)))
+@end
+
+when parsing workspace,
+~ check for prefix
+
+note:
+- tree-sitter will use unified `text` node for multiple places, it's fine because we can still query it via field names.
+- for parsers that doesn't support /field/, they can use nodes named like `workspace_name`, `path`, `scope_text` instead.
+
+@code
+* heading:** heading
+
+(scopedlink
+  scope: (scope
+           (heading_prefix)
+           (text))
+  (scope_delmiter)
+  scope: (scope
+           (heading_prefix)
+           (text)))
+@end
+
+@code
+https://example.com
+(rawlink)
+@end

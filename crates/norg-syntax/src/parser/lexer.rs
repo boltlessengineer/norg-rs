@@ -41,7 +41,7 @@ impl<'s> Lexer<'s> {
             self.s.eat();
             NormalTokenKind::Newline
         } else if c.is_punctuation() {
-            self.s.eat_while(c);
+            self.s.eat();
             NormalTokenKind::Special(c)
         } else {
             self.s

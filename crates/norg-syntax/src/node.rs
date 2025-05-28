@@ -15,10 +15,12 @@ impl SyntaxNode {
         Self(Repr::Leaf(LeafNode::new(kind, range)))
     }
     pub fn inner(kind: SyntaxKind, children: Vec<Self>) -> Self {
+        // TODO: accept range and debug_assert that all children nodes fit inside that range
         Self(Repr::Inner(InnerNode::new(kind, children)))
     }
-    pub fn error(node: ErrorNode) -> Self {
-        Self(Repr::Error(node))
+    pub fn error(range: Range, text: &str) -> Self {
+        let text = String::from(text);
+        Self(Repr::Error(ErrorNode { range, text }))
     }
 
     pub fn kind(&self) -> SyntaxKind {
@@ -182,6 +184,8 @@ pub enum SyntaxKind {
     VerbatimClose,
     MarkupOpen,
     MarkupClose,
+    DestinationOpen,
+    DestinationClose,
 
     // {asdf}[asdf]
     Link,
@@ -190,10 +194,39 @@ pub enum SyntaxKind {
     // [asdf]
     AnchorReference,
 
-    // [this]
+    /// `[this]`
     Markup,
-    // {this}
+    /// `{this}`
     Destination,
+
+    /// `:$name/path:* title`
+    DestApplink,
+    /// `* asdf:** asdf`
+    DestScopedLink,
+    /// `https://example.com`
+    DestRawlink,
+
+    /// `:`
+    DestApplinkPrefix,
+    /// `$name`
+    DestApplinkWorkspace,
+    /// `$`
+    DestApplinkWorkspacePrefix,
+    /// `name`
+    DestApplinkWorkspaceName,
+    /// `path`
+    DestApplinkPath,
+
+    /// `:`
+    DestScopeDelimiter,
+    DestScopeHeading,
+    DestScopeWikiHeading,
+    /// `*`
+    DestScopeHeadingPrefix,
+    /// `?`
+    DestScopeWikiHeadingPrefix,
+    /// `title`
+    DestScopeText,
 
     Error,
 }

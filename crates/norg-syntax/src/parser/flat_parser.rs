@@ -119,8 +119,11 @@ impl<'s> FlatParser<'s> {
                 }
             }
             NormalTokenKind::Special('*') => 'heading: {
-                self.lexer.next();
-                let level = t.len();
+                let mut level = 0;
+                while self.lexer.peek().kind == t.kind {
+                    level += 1;
+                    self.lexer.next();
+                }
                 let wt = self.lexer.peek();
                 if !wt.is_whitespace() {
                     break 'heading;
@@ -152,10 +155,14 @@ impl<'s> FlatParser<'s> {
                 return SyntaxNode::inner(SyntaxKind::InfirmTag, leafs);
             }
             NormalTokenKind::Special('@') => 'ranged_tag: {
+                let mut level = 0;
+                while self.lexer.peek().kind == t.kind {
+                    level += 1;
+                    self.lexer.next();
+                }
                 let Some(mut leafs) = self.parse_tag_line(SyntaxKind::InfirmTagPrefix) else {
                     break 'ranged_tag;
                 };
-                let level = t.len();
                 let p = self.lexer.peek();
                 match p.kind {
                     NormalTokenKind::Newline => {
