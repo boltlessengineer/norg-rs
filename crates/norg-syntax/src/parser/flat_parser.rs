@@ -45,7 +45,7 @@ impl<'s> FlatParser<'s> {
         let t = self.lexer.peek();
         let start = t.range.start;
         match t.kind {
-            NormalTokenKind::EOF => IncompleteNext::EOF,
+            NormalTokenKind::End => IncompleteNext::EOF,
             NormalTokenKind::Whitespace => {
                 // skip preceding whitespaces and continue
                 self.lexer.next();
@@ -106,7 +106,7 @@ impl<'s> FlatParser<'s> {
                 self.lexer.next();
                 return self.parse_base_block();
             }
-            NormalTokenKind::Newline | NormalTokenKind::EOF => {
+            NormalTokenKind::Newline | NormalTokenKind::End => {
                 self.lexer.next();
                 return SyntaxNode::leaf(SyntaxKind::BlankLine, t.range);
             }
@@ -168,7 +168,7 @@ impl<'s> FlatParser<'s> {
                     NormalTokenKind::Newline => {
                         self.lexer.next();
                     }
-                    NormalTokenKind::EOF => {
+                    NormalTokenKind::End => {
                         todo!("generate error token");
                     }
                     _ => unreachable!("last non-argument character should be eol token. get: {p:?}"),

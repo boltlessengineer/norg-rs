@@ -11,7 +11,7 @@ pub fn parse(text: &str) -> SyntaxNode {
 }
 
 pub fn parse_inline(text: &str) -> Vec<SyntaxNode> {
-    let mut p = parser::inline2::InlineParser::new(text);
+    let mut p = parser::inline2::InlineParser2::new(text);
     p.next();
     p.next();
     p.next();

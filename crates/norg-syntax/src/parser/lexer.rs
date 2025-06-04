@@ -1,7 +1,7 @@
 use unicode_categories::UnicodeCategories;
 use unscanny::Scanner;
 
-use crate::Range;
+use crate::{node::SyntaxKind, Range};
 
 pub struct Lexer<'s> {
     s: Scanner<'s>,
@@ -22,7 +22,7 @@ impl<'s> Lexer<'s> {
         let start = self.s.cursor();
         let Some(c) = self.s.peek() else {
             let range = Range::new(start, self.s.cursor());
-            return Token { kind: NormalTokenKind::EOF, range };
+            return Token { kind: NormalTokenKind::End, range };
         };
         let kind = if c == SPACE {
             self.s.eat_while(SPACE);
@@ -33,7 +33,7 @@ impl<'s> Lexer<'s> {
                 }
                 None => {
                     self.s.eat();
-                    NormalTokenKind::EOF
+                    NormalTokenKind::End
                 }
                 _ => NormalTokenKind::Whitespace,
             }
@@ -121,31 +121,83 @@ impl<'s> Lexer<'s> {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Token<K: TokenKind> {
+pub struct Lexer2<'s> {
+    s: Scanner<'s>,
+}
+
+impl<'s> Lexer2<'s> {
+    pub fn new(text: &'s str) -> Self {
+        Self {
+            s: Scanner::new(text),
+        }
+    }
+    pub fn cursor(&self) -> usize {
+        self.s.cursor()
+    }
+    pub fn peek(&self) -> Token<NormalTokenKind> {
+        let mut s = self.s;
+        Self::lex_at(&mut s)
+    }
+    pub fn jump(&mut self, pos: usize) {
+        self.s.jump(pos);
+    }
+    pub fn eat(&mut self) -> Token<NormalTokenKind> {
+        Self::lex_at(&mut self.s)
+    }
+    fn lex_at(s: &mut Scanner) -> Token<NormalTokenKind> {
+        let start = s.cursor();
+        let Some(ch) = s.eat() else {
+            return Token { kind: NormalTokenKind::End, range: Range::new(s.cursor(), s.cursor()) };
+        };
+        let kind = if ch == SPACE {
+            s.eat_while(SPACE);
+            match s.peek() {
+                Some(NEWLINE) => {
+                    s.eat();
+                    NormalTokenKind::Newline
+                }
+                None => {
+                    NormalTokenKind::End
+                }
+                _ => NormalTokenKind::Whitespace,
+            }
+        } else if ch == NEWLINE {
+            NormalTokenKind::Special(ch)
+        } else if ch.is_ascii_punctuation() { // TODO: change to proper punctuation detection
+            NormalTokenKind::Special(ch)
+        } else {
+            s.eat_while(|c: char| !c.is_whitespace() && !c.is_punctuation());
+            NormalTokenKind::Word
+        };
+        let range = Range::new(start, s.cursor());
+        Token { kind, range }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token<K> {
     pub kind: K,
     pub range: Range,
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum NormalTokenKind {
     Word,
     Special(char),
     Whitespace,
     /// EOL character including trailing whitespaces
     Newline,
-    EOF,
+    End,
 }
-pub trait TokenKind {
-    const END: Self;
-}
-impl TokenKind for NormalTokenKind {
-    const END: Self = Self::EOF;
-}
-impl TokenKind for ArgumentTokenKind {
-    const END: Self = Self::EOF;
-}
-impl TokenKind for RangedTagTokenKind {
-    const END: Self = Self::EOF;
+impl NormalTokenKind {
+    pub fn to_syntax_kind(&self) -> SyntaxKind {
+        match self {
+            Self::Word => SyntaxKind::Word,
+            Self::Special(ch) => SyntaxKind::Special(*ch),
+            Self::Whitespace => SyntaxKind::Whitespace,
+            Self::Newline => SyntaxKind::SoftBreak,
+            Self::End => SyntaxKind::End,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -172,7 +224,7 @@ impl Token<NormalTokenKind> {
     /// match all whitespace characters includine EOF
     pub fn is_whitespace(&self) -> bool {
         use NormalTokenKind::*;
-        matches!(self.kind, Whitespace | Newline | EOF)
+        matches!(self.kind, Whitespace | Newline | End)
     }
     pub fn is_word(&self) -> bool {
         use NormalTokenKind::*;
@@ -185,11 +237,14 @@ impl Token<NormalTokenKind> {
     /// match Newline or EOF
     pub fn is_eol(&self) -> bool {
         use NormalTokenKind::*;
-        matches!(self.kind, Newline | EOF)
+        matches!(self.kind, Newline | End)
     }
     /// match Word or '-'
     pub fn is_identifier(&self) -> bool {
         use NormalTokenKind::*;
         matches!(self.kind, Word | Special('-'))
+    }
+    pub fn to_syntax_token(&self) -> Token<SyntaxKind> {
+        Token { kind: self.kind.to_syntax_kind(), range: self.range }
     }
 }

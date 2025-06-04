@@ -11,6 +11,9 @@ enum Repr {
 }
 
 impl SyntaxNode {
+    pub fn is_leaf(&self) -> bool {
+        matches!(self.0, Repr::Leaf(_))
+    }
     pub fn leaf(kind: SyntaxKind, range: Range) -> Self {
         Self(Repr::Leaf(LeafNode::new(kind, range)))
     }
@@ -160,11 +163,13 @@ pub enum SyntaxKind {
 
     Word,
     Punctuation,
+    // TODO: replace Punctuation with Special(char)
+    Special(char),
     Escaped(char),
     Whitespace,
     SoftBreak,
     HardBreak,
-    Eof,
+    End,
 
     Bold,
     Italic,
