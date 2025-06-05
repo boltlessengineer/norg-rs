@@ -38,6 +38,9 @@ impl Range {
     pub fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
+    pub fn point(point: usize) -> Self {
+        Self::new(point, point)
+    }
     pub fn len(&self) -> usize {
         self.end - self.start
     }

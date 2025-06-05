@@ -1,3 +1,16 @@
+- (x) non-verbatim attached modifiers
+- ( ) verbatim attached modifiers
+- ( ) link / anchor
+-- (x) destination
+-- ( ) markup
+-- ( ) wrap them
+- ( ) escaped
+- ( ) hard-break
+
+plan:
+- `InlineParser` won't have *current token* because it might change based on context.
+  Instead, it will have `.current()` to get current token based on lexer mode.
+- `.lex()` and `.lex_at(pos)` to lex token
 
 link location syntax:
 

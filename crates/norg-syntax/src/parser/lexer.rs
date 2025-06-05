@@ -121,14 +121,17 @@ impl<'s> Lexer<'s> {
     }
 }
 
+#[derive(Clone)]
 pub struct Lexer2<'s> {
     s: Scanner<'s>,
+    pub mode: LexMode,
 }
 
 impl<'s> Lexer2<'s> {
     pub fn new(text: &'s str) -> Self {
         Self {
             s: Scanner::new(text),
+            mode: LexMode::Markup,
         }
     }
     pub fn cursor(&self) -> usize {
@@ -136,6 +139,11 @@ impl<'s> Lexer2<'s> {
     }
     pub fn peek(&self) -> Token<NormalTokenKind> {
         let mut s = self.s;
+        Self::lex_at(&mut s)
+    }
+    pub fn peek_at(&self, pos: usize) -> Token<NormalTokenKind> {
+        let mut s = self.s;
+        s.jump(pos);
         Self::lex_at(&mut s)
     }
     pub fn jump(&mut self, pos: usize) {
@@ -166,12 +174,85 @@ impl<'s> Lexer2<'s> {
         } else if ch.is_ascii_punctuation() { // TODO: change to proper punctuation detection
             NormalTokenKind::Special(ch)
         } else {
-            s.eat_while(|c: char| !c.is_whitespace() && !c.is_punctuation());
+            s.eat_while(|c: char| !c.is_whitespace() && !c.is_ascii_punctuation());
             NormalTokenKind::Word
         };
         let range = Range::new(start, s.cursor());
         Token { kind, range }
     }
+
+    pub fn lex_(&mut self) -> Token<SyntaxKind> {
+        match self.mode {
+            LexMode::Markup => self.eat().to_syntax_token(),
+            LexMode::AppLink(prefix) => self.lex_dest_applink(prefix),
+            LexMode::Attributes => todo!(),
+        }
+    }
+    pub fn peek_(&self) -> Token<SyntaxKind> {
+        let mut lexer = self.clone();
+        lexer.lex_()
+    }
+    pub fn lex_dest_applink(&mut self, prefix: bool) -> Token<SyntaxKind> {
+        use NormalTokenKind::*;
+        let token = self.eat();
+        let start = token.range.start;
+        let (kind, range) = match token.kind {
+            End => (SyntaxKind::End, token.range),
+            Special('\\') => match self.peek().kind {
+                Special(ch) => {
+                    self.eat();
+                    (
+                        SyntaxKind::Escaped(ch),
+                        Range::new(start, self.cursor()),
+                    )
+                }
+                _ => (SyntaxKind::DestScopeText, token.range),
+            },
+            Special('}') => (SyntaxKind::DestinationClose, token.range),
+            Special(':') => (SyntaxKind::DestScopeDelimiter, token.range),
+            Whitespace | Newline if prefix => {
+                return self.lex_dest_applink(prefix);
+            }
+            Whitespace | Newline => {
+                if matches!(self.peek().kind, Special(':' | '}') | End) {
+                    // skip scope's trailing whitespace
+                    return self.lex_dest_applink(prefix);
+                } else {
+                    (SyntaxKind::Whitespace, token.range)
+                }
+            }
+            Special('*') if prefix => {
+                while self.peek().kind == token.kind {
+                    self.eat();
+                }
+                let range = Range::new(start, self.cursor());
+                if self.peek().is_whitespace() {
+                    self.eat();
+                    (SyntaxKind::DestScopeHeadingPrefix, range)
+                } else {
+                    (SyntaxKind::DestScopeText, range)
+                }
+            }
+            Special('?') if prefix => {
+                if self.peek().is_whitespace() {
+                    self.eat();
+                    (SyntaxKind::DestScopeWikiHeadingPrefix, token.range)
+                } else {
+                    (SyntaxKind::DestScopeText, token.range)
+                }
+            }
+            Special(_) | Word => (SyntaxKind::DestScopeText, token.range),
+        };
+        Token { kind, range }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum LexMode {
+    #[default]
+    Markup,
+    AppLink(bool),
+    Attributes,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -246,5 +327,20 @@ impl Token<NormalTokenKind> {
     }
     pub fn to_syntax_token(&self) -> Token<SyntaxKind> {
         Token { kind: self.kind.to_syntax_kind(), range: self.range }
+    }
+}
+
+impl Token<SyntaxKind> {
+    pub fn is_whitespace(&self) -> bool {
+        use SyntaxKind::*;
+        matches!(self.kind, Whitespace | SoftBreak | End)
+    }
+    pub fn is_word(&self) -> bool {
+        use SyntaxKind::*;
+        matches!(self.kind, Word)
+    }
+    pub fn is_punctuation(&self) -> bool {
+        use SyntaxKind::*;
+        matches!(self.kind, Special(_))
     }
 }

@@ -56,7 +56,7 @@ pub struct InnerNode {
     pub children: Vec<SyntaxNode>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub struct ErrorNode {
     pub text: String,
     pub range: Range,
@@ -102,6 +102,12 @@ impl std::fmt::Debug for InnerNode {
             f.debug_list().entries(&self.children).finish()?;
         }
         Ok(())
+    }
+}
+
+impl std::fmt::Debug for ErrorNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Error: {}-{} : {}", self.range.start, self.range.end, self.text)
     }
 }
 
@@ -191,6 +197,14 @@ pub enum SyntaxKind {
     MarkupClose,
     DestinationOpen,
     DestinationClose,
+
+    InlineTag,
+    InlineTagPrefix,
+
+    /// `(`
+    AttributeOpen,
+    /// `)`
+    AttributeClose,
 
     // {asdf}[asdf]
     Link,

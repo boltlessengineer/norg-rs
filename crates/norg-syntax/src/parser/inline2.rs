@@ -1,18 +1,11 @@
 use unscanny::{Pattern, Scanner};
 
-use crate::{node::{SyntaxKind, SyntaxNode}, Range};
+use crate::{node::{SyntaxKind, SyntaxNode}, parser::lexer, Range};
 
-use super::lexer::{Lexer2, NormalTokenKind, Token};
-
-macro_rules! leaf {
-    ($kind:ident, $range:expr) => {
-        SyntaxNode::leaf(SyntaxKind::$kind, $range)
-    };
-}
+use super::lexer::{Lexer2, Token};
 
 #[derive(Debug)]
 struct Frame {
-    // TODO: use this
     wrap_kind: SyntaxKind,
     children: Vec<SyntaxNode>,
 }
@@ -92,29 +85,18 @@ impl ScannerExt for Scanner<'_> {
 
 pub struct InlineParser2<'s> {
     lexer: Lexer2<'s>,
-    current: Token<SyntaxKind>,
     inner_stack: Vec<Frame>,
     nodes: Vec<SyntaxNode>,
-    dest_mode: bool,
-    dest_start: bool,
     last_kind: SyntaxKind,
 }
 
 impl<'s> InlineParser2<'s> {
     pub fn new(text: &'s str) -> Self {
-        let mut lexer = Lexer2::new(text);
-        let current = lexer.eat();
-        let current = Token {
-            kind: current.kind.to_syntax_kind(),
-            range: current.range,
-        };
+        let lexer = Lexer2::new(text);
         Self {
             lexer,
-            current,
             inner_stack: Vec::new(),
             nodes: Vec::new(),
-            dest_mode: false,
-            dest_start: true,
             last_kind: SyntaxKind::End,
         }
     }
@@ -125,39 +107,10 @@ impl<'s> InlineParser2<'s> {
         self.nodes
     }
     fn push(&mut self, node: SyntaxNode) {
-        if node.is_leaf() {
-            self.last_kind = node.kind();
-        }
         if let Some(frame) = self.inner_stack.last_mut() {
             frame.children.push(node);
         } else {
             self.nodes.push(node);
-        }
-    }
-    fn current(&self) -> SyntaxKind {
-        self.current.kind
-    }
-    fn at(&self, kind: SyntaxKind) -> bool {
-        self.current() == kind
-    }
-    fn eat(&mut self) {
-        self.push(SyntaxNode::leaf(self.current.kind, self.current.range));
-        self.current = self.lex();
-    }
-    fn skip(&mut self) {
-        self.current = self.lex();
-    }
-    fn eat_as(&mut self, kind: SyntaxKind) {
-        self.push(SyntaxNode::leaf(kind, self.current.range));
-        self.current = self.lex();
-    }
-    fn expect(&mut self, kind: SyntaxKind) {
-        let at = self.at(kind);
-        if at {
-            self.eat();
-        } else {
-            self.push(SyntaxNode::error(self.current.range, "missing token"));
-            // todo!("push error token")
         }
     }
     fn start_frame(&mut self, kind: SyntaxKind) {
@@ -173,192 +126,11 @@ impl<'s> InlineParser2<'s> {
             }
         };
     }
-    fn with_frame(&mut self, kind: SyntaxKind, func: impl FnOnce(&mut Self)) {
+    fn with_frame<R>(&mut self, kind: SyntaxKind, func: impl FnOnce(&mut Self) -> R) -> R {
         self.start_frame(kind);
-        func(self);
+        let r = func(self);
         self.close_frame();
-    }
-    pub fn next(&mut self) {
-        use SyntaxKind::*;
-        match self.current() {
-            End | Whitespace | Word => self.eat(),
-            SoftBreak => self.eat_as(SyntaxKind::SoftBreak),
-            Special('\\') if self.lexer.peek().is_punctuation() => {
-                let start = self.current.range.start;
-                self.skip();
-                self.skip();
-                let range = Range::new(start, self.lexer.cursor());
-                self.push(SyntaxNode::leaf(SyntaxKind::Escaped('c'), range));
-            }
-            Special('{') => {
-                self.with_frame(SyntaxKind::Destination, |p| {
-                    p.eat_as(SyntaxKind::DestinationOpen);
-                    if p.at(Special(':')) {
-                        p.current.kind = DestApplinkPrefix;
-                        p.with_frame(SyntaxKind::DestApplink, |p| {
-                            p.dest_mode = true;
-                            p.parse_dest_applink();
-                            p.dest_mode = false;
-                        });
-                    } else if p.at(Special('*')) || p.at(Special('?')) {
-                        todo!("local link");
-                    } else {
-                        p.with_frame(SyntaxKind::DestRawlink, |p| loop {
-                            match p.current() {
-                                Special('}') => {
-                                    p.current.kind = DestinationClose;
-                                    break;
-                                }
-                                _ => p.eat(),
-                            }
-                        });
-                    }
-                    p.expect(SyntaxKind::DestinationClose);
-                });
-            }
-            Special(':') => {
-                let start = self.current.range.start;
-                let origin = self.lexer.cursor();
-                let t = self.lexer.eat();
-                match t.kind {
-                    NormalTokenKind::Special(ch) if self.can_open(ch) => {
-                        let kind = AttachedMod::from_char(ch).unwrap();
-                        self.start_frame(kind.to_syntax());
-                        self.push(SyntaxNode::leaf(kind.to_syntax_open(), Range::new(start, self.lexer.cursor())));
-                        self.skip();
-                    }
-                    _ => {
-                        self.lexer.jump(origin);
-                        self.eat();
-                    }
-                }
-            }
-            Special(ch) if self.can_open(ch) => {
-                let kind = AttachedMod::from_char(ch).unwrap();
-                self.start_frame(kind.to_syntax());
-                self.eat_as(kind.to_syntax_open());
-            }
-            Special(ch) if self.can_close(ch) => {
-                let mut range = self.current.range;
-                if self.lexer.peek().kind == NormalTokenKind::Special(':') {
-                    range.end = self.lexer.eat().range.end;
-                }
-                let kind = AttachedMod::from_char(ch).unwrap();
-                self.push(SyntaxNode::leaf(kind.to_syntax_close(), range));
-                self.skip();
-                self.close_frame();
-            }
-            Special(_) => self.eat(),
-            _ => unreachable!(),
-        }
-    }
-    fn lex(&mut self) -> Token<SyntaxKind> {
-        if self.dest_mode {
-            self.lex_dest_applink(self.dest_start)
-        } else {
-            self.lexer.eat().to_syntax_token()
-        }
-    }
-    fn lex_dest_applink(&mut self, prefix: bool) -> Token<SyntaxKind> {
-        use NormalTokenKind::*;
-        let token = self.lexer.eat();
-        let start = token.range.start;
-        let (kind, range) = match token.kind {
-            End => (SyntaxKind::End, token.range),
-            Special('\\') => match self.lexer.peek().kind {
-                Special(ch) => {
-                    self.lexer.eat();
-                    (
-                        SyntaxKind::Escaped(ch),
-                        Range::new(start, self.lexer.cursor()),
-                    )
-                }
-                _ => (SyntaxKind::DestScopeText, token.range),
-            },
-            Special('}') => (SyntaxKind::DestinationClose, token.range),
-            Special(':') => (SyntaxKind::DestScopeDelimiter, token.range),
-            Whitespace | Newline if prefix => {
-                return self.lex_dest_applink(prefix);
-            }
-            Whitespace | Newline => {
-                if matches!(self.lexer.peek().kind, Special(':' | '}') | End) {
-                    // skip scope's trailing whitespace
-                    return self.lex_dest_applink(prefix);
-                } else {
-                    (SyntaxKind::Whitespace, token.range)
-                }
-            }
-            Special('*') if prefix => {
-                while self.lexer.peek().kind == token.kind {
-                    self.lexer.eat();
-                }
-                let range = Range::new(start, self.lexer.cursor());
-                if self.lexer.peek().is_whitespace() {
-                    self.lexer.eat();
-                    (SyntaxKind::DestScopeHeadingPrefix, range)
-                } else {
-                    (SyntaxKind::DestScopeText, range)
-                }
-            }
-            Special('?') if prefix => {
-                if self.lexer.peek().is_whitespace() {
-                    self.lexer.eat();
-                    (SyntaxKind::DestScopeWikiHeadingPrefix, token.range)
-                } else {
-                    (SyntaxKind::DestScopeText, token.range)
-                }
-            }
-            Special(_) | Word => (SyntaxKind::DestScopeText, token.range),
-        };
-        Token { kind, range }
-    }
-    fn parse_dest_applink(&mut self) {
-        use SyntaxKind::*;
-        debug_assert!(self.dest_mode);
-        self.expect(DestApplinkPrefix);
-        while !matches!(self.current(), DestinationClose | End) {
-            // self.current = self.lex_dest_applink(true);
-            match self.current() {
-                End | DestinationClose => return,
-                DestScopeDelimiter => {
-                    self.dest_start = true;
-                    self.eat();
-                },
-                DestScopeHeadingPrefix => {
-                    self.dest_start = false;
-                    self.with_frame(DestScopeHeading, |p| {
-                        p.eat_as(DestScopeHeadingPrefix);
-                        p.with_frame(DestScopeText, |p| loop {
-                            match p.current() {
-                                End | DestinationClose | DestScopeDelimiter => break,
-                                _ => p.eat(),
-                            }
-                        });
-                    });
-                }
-                DestScopeWikiHeadingPrefix => {
-                    self.dest_start = false;
-                    self.with_frame(DestScopeWikiHeading, |p| {
-                        p.eat_as(DestScopeWikiHeadingPrefix);
-                        p.with_frame(DestScopeText, |p| loop {
-                            match p.current() {
-                                End | DestinationClose | DestScopeDelimiter => break,
-                                _ => p.eat(),
-                            }
-                        });
-                    });
-                }
-                _ => {
-                    self.dest_start = false;
-                    self.with_frame(DestApplinkPath, |p| loop {
-                        match p.current() {
-                            End | DestinationClose | DestScopeDelimiter => break,
-                            _ => p.eat(),
-                        }
-                    });
-                }
-            }
-        }
+        r
     }
     fn has_frame(&self, kind: SyntaxKind) -> bool {
         self.inner_stack.iter().find(|f| f.wrap_kind == kind).is_some()
@@ -374,8 +146,9 @@ impl<'s> InlineParser2<'s> {
             && self.last_kind != SyntaxKind::Word
             && self.last_kind != SyntaxKind::Special(c)
             && {
-                let peek = self.lexer.peek();
-                !peek.is_whitespace() && peek.kind != NormalTokenKind::Special(c)
+                let peek = self.peek_at(1);
+                dbg!(&peek);
+                !peek.is_whitespace() && peek.kind != SyntaxKind::Special(c)
             }
     }
     fn can_close(&self, c: char) -> bool {
@@ -388,8 +161,252 @@ impl<'s> InlineParser2<'s> {
                 && self.last_kind != SyntaxKind::End)
             && self.last_kind != SyntaxKind::Special(c)
             && {
-                let peek = self.lexer.peek();
-                !peek.is_word() && peek.kind != NormalTokenKind::Special(c)
+                let peek = self.peek_at(1);
+                !peek.is_word() && peek.kind != SyntaxKind::Special(c)
             }
+    }
+    #[doc(alias = "lex")]
+    fn peek(&self) -> Token<SyntaxKind> {
+        // TODO: switch lexer based on frame context:
+        // has_frame(link) -> lex with link lexer, check for link_close
+        // in_frame(bold) -> check for bold_close
+        self.lexer.peek_()
+    }
+    fn at(&self, kind: SyntaxKind) -> bool {
+        self.peek().kind == kind
+    }
+    /// `pos` is count of token to skip
+    fn peek_at(&self, pos: usize) -> Token<SyntaxKind> {
+        let mut lexer = self.lexer.clone();
+        for _ in 0..pos {
+            lexer.lex_();
+        }
+        lexer.peek_()
+    }
+    fn skip(&mut self, token: &Token<SyntaxKind>) {
+        self.last_kind = token.kind;
+        self.lexer.jump(token.range.end);
+    }
+    // FIXME: this should not automatically jump the lexer
+    // because lexer might already skipped trivia bytes by itself
+    fn consume(&mut self, token: Token<SyntaxKind>) {
+        self.skip(&token);
+        self.push(SyntaxNode::leaf(token.kind, token.range));
+    }
+    fn consume_as(&mut self, mut token: Token<SyntaxKind>, kind: SyntaxKind) {
+        token.kind = kind;
+        self.consume(token);
+    }
+    fn expect_as(&mut self, kind: SyntaxKind, kind_as: SyntaxKind) {
+        let t = self.lexer.lex_();
+        if t.kind == kind {
+            self.consume_as(t, kind_as);
+        } else {
+            self.push(SyntaxNode::error(t.range, &format!("missing token. got {:?}", t.kind)));
+        }
+    }
+    /// peek markup token (pre-process token to bold_open or bold_close here)
+    fn peek_markup(&self) -> Token<SyntaxKind> {
+        use SyntaxKind::*;
+        let current = self.peek();
+        match current.kind {
+            Special('\\') => {
+                let next = self.peek_at(1);
+                match next.kind {
+                    Special(ch) => Token { kind: Escaped(ch), range: Range::new(current.range.start, next.range.end) },
+                    Word => Token { kind: InlineTagPrefix, range: current.range },
+                    // TODO: add hard break
+                    _ => todo!(),
+                }
+            }
+            // TODO: preprocess bold_open / bold_close tokens
+            _ => current,
+        }
+    }
+    /// consume multiple markup nodes and return last, not consumed token
+    fn markups(&mut self, stop_set: &[SyntaxKind]) -> Token<SyntaxKind> {
+        loop {
+            let current = self.peek_markup();
+            // check if markup token is stop_set. (e.g. End) -> return it to show stop reason
+            if stop_set.contains(&current.kind) {
+                return current
+            }
+            self.parse_markup_token(current);
+        }
+    }
+    fn parse_markup_token(&mut self, token: Token<SyntaxKind>) {
+        use SyntaxKind::*;
+        match token.kind {
+            End | Whitespace | SoftBreak | Word | Escaped(_) | Special(_) => self.consume(token),
+            InlineTagPrefix => todo!("implement inline tag"),
+            DestinationOpen => {
+                self.with_frame(Destination, |p| {
+                    p.consume(token);
+                    let peeked = p.peek().kind;
+                    match peeked {
+                        Special(':') => {
+                            // applink
+                        }
+                        Special('*' | '?') => {
+                            // local scoped link
+                        }
+                        _ => {
+                            // raw link
+                        }
+                    }
+                    todo!("expect close token");
+                });
+            }
+            BoldOpen => {
+                self.with_frame(Bold, |p| {
+                    p.consume(token);
+                    let last = p.markups(&[BoldClose, End]);
+                    todo!()
+                });
+            }
+            _ => unreachable!(),
+        }
+    }
+    pub fn next(&mut self) {
+        use SyntaxKind::*;
+        let current = self.peek();
+        match current.kind {
+            End | Whitespace | Word => self.consume(current),
+            SoftBreak => self.consume_as(current, SyntaxKind::SoftBreak),
+            Special('\\') if self.peek_at(1).is_punctuation() => {
+                let escaped = self.peek_at(1);
+                let ch = match escaped.kind {
+                    Special(ch) => ch,
+                    _ => unreachable!(),
+                };
+                let range = Range::new(current.range.start, escaped.range.end);
+                self.consume(Token {
+                    kind: SyntaxKind::Escaped(ch),
+                    range,
+                });
+            }
+            Special('{') => {
+                self.with_frame(SyntaxKind::Destination, |p| {
+                    p.consume_as(current, SyntaxKind::DestinationOpen);
+                    if p.at(Special(':')) {
+                        p.with_frame(SyntaxKind::DestApplink, |p| {
+                            p.lexer.mode = lexer::LexMode::AppLink(true);
+                            p.parse_dest_applink();
+                            p.lexer.mode = lexer::LexMode::Markup;
+                        });
+                    } else if p.at(Special('*')) || p.at(Special('?')) {
+                        todo!("local link");
+                    } else {
+                        p.with_frame(SyntaxKind::DestRawlink, |p| loop {
+                            let t = p.lexer.lex_();
+                            match t.kind {
+                                End | Special('}') => break,
+                                _ => p.consume(t),
+                            }
+                        });
+                    }
+                    // skip whitespaces (this won't be needed if we don't jump the lexer position
+                    // from p.consume()
+                    loop {
+                        let t = p.peek();
+                        if t.kind != SyntaxKind::Whitespace && t.kind != SyntaxKind::SoftBreak {
+                            break;
+                        }
+                        p.lexer.jump(t.range.end);
+                    }
+                    p.expect_as(SyntaxKind::Special('}'), SyntaxKind::DestinationClose);
+                });
+            }
+            // instead of checking from here, preprocess peeked token before the match statement
+            // same goes to can_open and can_close
+            Special(':') => {
+                let start = current.range.start;
+                self.skip(&current);
+                let t = self.peek();
+                match t.kind {
+                    Special(ch) if self.can_open(ch) => {
+                        let kind = AttachedMod::from_char(ch).unwrap();
+                        self.start_frame(kind.to_syntax());
+                        self.consume(Token {
+                            kind: kind.to_syntax_open(),
+                            range: Range::new(start, t.range.end),
+                        });
+                    }
+                    _ => self.consume(current),
+                }
+            }
+            Special(ch) if self.can_open(ch) => {
+                let kind = AttachedMod::from_char(ch).unwrap();
+                self.start_frame(kind.to_syntax());
+                self.consume_as(current, kind.to_syntax_open());
+            }
+            Special(ch) if self.can_close(ch) => {
+                self.skip(&current);
+                let mut range = current.range;
+                if self.peek().kind == SyntaxKind::Special(':') {
+                    range.end = self.lexer.lex_().range.end;
+                }
+                let kind = AttachedMod::from_char(ch).unwrap();
+                self.consume(Token {
+                    kind: kind.to_syntax_close(),
+                    range,
+                });
+                self.close_frame();
+                self.lexer.jump(range.end);
+            }
+            Special(_) => self.consume(current),
+            _ => unreachable!(),
+        }
+    }
+    fn parse_dest_applink(&mut self) -> Token<SyntaxKind> {
+        use SyntaxKind::*;
+        debug_assert_eq!(self.lexer.mode, lexer::LexMode::AppLink(true));
+        loop {
+            let t = self.peek();
+            match t.kind {
+                DestinationClose | End => return t,
+                DestScopeDelimiter => {
+                    self.consume(t);
+                    self.lexer.mode = lexer::LexMode::AppLink(true);
+                },
+                DestScopeHeadingPrefix => {
+                    self.lexer.mode = lexer::LexMode::AppLink(false);
+                    self.with_frame(DestScopeHeading, |p| {
+                        p.consume_as(t, DestScopeHeadingPrefix);
+                        p.with_frame(DestScopeText, |p| loop {
+                            let t = p.peek();
+                            match t.kind {
+                                End | DestinationClose | DestScopeDelimiter => break,
+                                _ => p.consume(t),
+                            }
+                        });
+                    });
+                }
+                DestScopeWikiHeadingPrefix => {
+                    self.lexer.mode = lexer::LexMode::AppLink(false);
+                    self.with_frame(DestScopeWikiHeading, |p| {
+                        p.consume_as(t, DestScopeWikiHeadingPrefix);
+                        p.with_frame(DestScopeText, |p| loop {
+                            let t = p.peek();
+                            match t.kind {
+                                End | DestinationClose | DestScopeDelimiter => break,
+                                _ => p.consume(t),
+                            }
+                        });
+                    });
+                }
+                _ => {
+                    self.lexer.mode = lexer::LexMode::AppLink(false);
+                    self.with_frame(DestApplinkPath, |p| loop {
+                        let t = p.peek();
+                        dbg!(t.kind);
+                        match t.kind {
+                            End | DestinationClose | DestScopeDelimiter => break,
+                            _ => p.consume(t),
+                        }
+                    });
+                }
+            }
+        }
     }
 }
