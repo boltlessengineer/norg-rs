@@ -88,9 +88,7 @@ pub fn lex_markup(s: &mut Scanner, current: MarkupKind, last_kind: SyntaxKind) -
     use SyntaxKind::*;
     if s.scout(-1).is_none_or(is_newline) {
         if let Some(pb) = lex_non_para_prefix(s) {
-            println!("====== paragraph break:");
-            dbg!(pb);
-            return Err(ParagraphBreak::BlankLine);
+            return Err(ParagraphBreak(pb));
         }
     }
     let base = lex_base(s);
@@ -180,13 +178,18 @@ pub fn lex_verbatim(s: &mut Scanner) -> SToken {
 /// pretty similar to lex_verbatim but for destination
 /// - base tokens (end, word, whitespace, escaped, etc)
 /// - destination_close
-pub fn lex_destination(s: &mut Scanner) -> SToken {
+pub fn lex_destination(s: &mut Scanner) -> Result<SToken, ParagraphBreak> {
     use SyntaxKind::*;
+    if s.scout(-1).is_none_or(is_newline) {
+        if let Some(pb) = lex_non_para_prefix(s) {
+            return Err(ParagraphBreak(pb));
+        }
+    }
     let base = lex_base(s);
-    match base.kind {
+    Ok(match base.kind {
         Special('}') => base.as_kind(DestinationClose),
         _ => base
-    }
+    })
 }
 
 /// parse applink and local link. parse prefix tokens when `start` is true
@@ -194,13 +197,18 @@ pub fn lex_destination(s: &mut Scanner) -> SToken {
 /// - scope_delimiter
 /// - heading_prefix
 /// - destination_close
-pub fn lex_smart_destination(s: &mut Scanner, start: bool) -> SToken {
+pub fn lex_smart_destination(s: &mut Scanner, start: bool) -> Result<SToken, ParagraphBreak> {
     use SyntaxKind::*;
+    if s.scout(-1).is_none_or(is_newline) {
+        if let Some(pb) = lex_non_para_prefix(s) {
+            return Err(ParagraphBreak(pb));
+        }
+    }
     if start {
         s.eat_while(is_whitespace);
     }
     let base = lex_base(s);
-    match base.kind {
+    Ok(match base.kind {
         Special('}') => base.as_kind(DestinationClose),
         Special(':') => {
             // skip all trailing whitespaces
@@ -218,6 +226,9 @@ pub fn lex_smart_destination(s: &mut Scanner, start: bool) -> SToken {
             s.eat_while(is_whitespace);
             base.as_kind(DestScopeWikiHeadingPrefix)
         }
+        Special('$') if start => {
+            base.as_kind(DestApplinkWorkspacePrefix)
+        }
         // NOTE: this won't work well because it will break lookahead_paragraph_break rule
         // Whitespace | SoftBreak => {
         //     let mut tmp_s = s.clone();
@@ -232,14 +243,14 @@ pub fn lex_smart_destination(s: &mut Scanner, start: bool) -> SToken {
         //     }
         // }
         _ => base
-    }
+    })
 }
 
 /// - identifier
 /// - base tokens (end, word, whitespace, escaped, etc)
 /// - attribute_delimiter
 /// - attribute_end
-pub fn lex_attributes(s: &mut Scanner, start: bool) -> SToken {
+pub fn lex_attributes(s: &mut Scanner, start: bool) -> Result<SToken, ParagraphBreak> {
     todo!()
 }
 
@@ -362,15 +373,17 @@ fn is_word(ch: char) -> bool {
     !is_whitespace(ch) && !is_punctuation(ch)
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ParagraphBreak {
-    // End,
-    // UnorderedIndent,
-    // OrderedIndent,
-    // QuoteIndent,
-    // NullIndent,
-    // HeadingPrefix,
-    BlankLine,
-    // TODO: add base_blocks like tag prefix and horizontal rule
-}
+#[derive(Clone, Debug)]
+pub struct ParagraphBreak(SToken);
 
+// #[derive(Clone, Debug, PartialEq)]
+// pub enum ParagraphBreak {
+//     // End,
+//     // UnorderedIndent,
+//     // OrderedIndent,
+//     // QuoteIndent,
+//     // NullIndent,
+//     // HeadingPrefix,
+//     BlankLine,
+//     // TODO: add base_blocks like tag prefix and horizontal rule
+// }

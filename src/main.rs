@@ -19,10 +19,10 @@ fn main() {
     // };
     // println!("input:\n{text}");
     // dbg!(inline_ast);
-    let text = r#"{}
+    let text = r#"*word word:
+
 * heading"#;
-//     let text = r#"*/word
-// ---"#;
+    // let text = r#"{:word"#;
     let ast = {
         let mut p = norg_syntax::parser::inline4::InlineParser::new(text);
         p.parse_paragraph()
