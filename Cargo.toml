@@ -21,5 +21,7 @@ tree-sitter-norg = { git = "https://github.com/boltlessengineer/tree-sitter-norg
 unicode_categories = "0.1.1"
 
 [dev-dependencies]
+insta = { version = "1.43.1", features = ["yaml"] }
+proptest = "1.7.0"
 serde_json = "1.0.140"
 # tree-sitter-norg = { path = "../tree-sitter-norg3" }
