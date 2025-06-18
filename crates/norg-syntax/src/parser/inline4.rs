@@ -254,3 +254,76 @@ impl InlineNodeSink {
         res
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use SyntaxKind::*;
+
+    macro_rules! token {
+        ($kind:ident, $start:literal..$end:literal) => {
+            SToken {
+                kind: SyntaxKind::$kind,
+                range: Range::new($start, $end),
+            }
+        };
+    }
+
+    macro_rules! leaf {
+        ($kind:expr, $start:literal..$end:literal) => {
+            SyntaxNode::leaf($kind, Range::new($start, $end))
+        };
+    }
+
+    macro_rules! inner {
+        ($kind:ident, [$( $child:expr ),* $(,)?]) => {
+            SyntaxNode::inner(SyntaxKind::$kind, vec![$($child),*])
+        };
+    }
+
+    fn parse_paragraph(text: &str) -> (Vec<SyntaxNode>, Option<ParagraphBreak>) {
+        let mut p = InlineParser::new(text);
+        let mut sink = InlineNodeSink::new();
+        let pb = p.parse_inline(MarkupKind::Base, &mut sink);
+        (sink.nodes, pb.err())
+    }
+
+    #[test]
+    fn test_paragraph_break() {
+        let text = concat!(
+            "word\n",
+            "* heading\n",
+        );
+        let (ast, pb) = parse_paragraph(text);
+        assert_eq!(
+            ast,
+            vec![
+                leaf!(Word, 0..4),
+                leaf!(SoftBreak, 4..5),
+            ],
+        );
+        assert_eq!(pb, Some(ParagraphBreak(token!(HeadingPrefix, 5..6))));
+
+        let text = concat!(
+            "{https://\n",
+            "* heading\n",
+        );
+        let (ast, pb) = parse_paragraph(text);
+        assert_eq!(
+            ast,
+            vec![
+                inner!(Destination, [
+                    leaf!(DestinationOpen, 0..1),
+                    inner!(DestRawlink, [
+                        leaf!(Word, 1..6),
+                        leaf!(Special(':'), 6..7),
+                        leaf!(Special('/'), 7..8),
+                        leaf!(Special('/'), 8..9),
+                        leaf!(SoftBreak, 9..10),
+                    ]),
+                ]),
+            ],
+        );
+        assert_eq!(pb, Some(ParagraphBreak(token!(HeadingPrefix, 10..11))));
+    }
+}
