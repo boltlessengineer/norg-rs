@@ -28,10 +28,16 @@ pub fn parse_inline(text: &str) -> Vec<SyntaxNode> {
     p.finish()
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Default)]
 pub struct Range {
     pub start: usize,
     pub end: usize,
+}
+
+impl std::fmt::Debug for Range {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}..{}", self.start, self.end)
+    }
 }
 
 impl Range {

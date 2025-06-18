@@ -90,13 +90,13 @@ impl std::fmt::Debug for SyntaxNode {
 
 impl std::fmt::Debug for LeafNode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}: {}-{}", self.kind, self.range.start, self.range.end)
+        write!(f, "{:?}: {:?}", self.kind, self.range)
     }
 }
 
 impl std::fmt::Debug for InnerNode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}: {}-{}", self.kind, self.range.start, self.range.end)?;
+        write!(f, "{:?}: {:?}", self.kind, self.range)?;
         if !self.children.is_empty() {
             f.write_str(" ")?;
             f.debug_list().entries(&self.children).finish()?;
@@ -107,7 +107,7 @@ impl std::fmt::Debug for InnerNode {
 
 impl std::fmt::Debug for ErrorNode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Error: {}-{} : {}", self.range.start, self.range.end, self.text)
+        write!(f, "Error: {:?} : {}", self.range, self.text)
     }
 }
 

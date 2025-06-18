@@ -3,7 +3,7 @@ use unscanny::Scanner;
 
 use crate::{node::{SyntaxKind, SyntaxNode}, Range};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SToken {
     pub kind: SyntaxKind,
     pub range: Range,
@@ -373,8 +373,8 @@ fn is_word(ch: char) -> bool {
     !is_whitespace(ch) && !is_punctuation(ch)
 }
 
-#[derive(Clone, Debug)]
-pub struct ParagraphBreak(SToken);
+#[derive(Clone, Debug, PartialEq)]
+pub struct ParagraphBreak(pub(crate) SToken);
 
 // #[derive(Clone, Debug, PartialEq)]
 // pub enum ParagraphBreak {
