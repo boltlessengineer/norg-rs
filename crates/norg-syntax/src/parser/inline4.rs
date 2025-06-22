@@ -21,7 +21,8 @@ impl Peeked {
 #[derive(Clone)]
 pub struct InlineParser<'s> {
     s: Scanner<'s>,
-    // TODO: `leftover` is missleading. rename this to `leftover`
+    // TODO: `peeked` is missleading. rename this to `leftover`
+    // TODO: No, this is basically a `current` token. refactor it to be a current token
     peeked: Option<Peeked>,
 }
 impl<'s> InlineParser<'s> {
@@ -54,6 +55,19 @@ impl<'s> InlineParser<'s> {
             }
         }
     }
+    fn peek_inline(
+        &mut self,
+        lexer: impl FnOnce(&mut Scanner) -> Result<SToken, ParagraphBreak>,
+    ) -> Option<&SToken> {
+        let t = self.lex_inline(lexer);
+        match t {
+            Some(t) => {
+                self.peeked = Some(Peeked::Token(t));
+                self.peeked.as_ref().map(|p| p.token())
+            }
+            None => None
+        }
+    }
     pub fn parse_paragraph(&mut self) -> (Vec<SyntaxNode>, Option<ParagraphBreak>) {
         let mut sink = InlineNodeSink::new();
         self.parse_inline(MarkupKind::Base, &mut sink);
@@ -66,23 +80,24 @@ impl<'s> InlineParser<'s> {
     fn parse_inline(&mut self, markup_kind: MarkupKind, sink: &mut InlineNodeSink) {
         use SyntaxKind::*;
         while let Some(t) = self.lex_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
-            // let t = self.lex_inline(|s| lex_markup(s, markup_kind, sink.last_kind))?;
             match t.kind {
                 // base tokens
                 End => break,
                 SoftBreak | HardBreak => sink.eat(t),
                 Whitespace | Word | Escaped(_) | Special(_) => sink.eat(t),
 
-                // TODO: do I need these?
                 // close tokens
+                // cache lexed token and break the loop
                 BoldClose if markup_kind == MarkupKind::Bold => {
-                    sink.eat(t);
-                    // TODO: peek next to see if it's attribute opener
-                    // and then parse it as attributes
+                    self.peeked = Some(Peeked::Token(t));
                     break;
                 }
                 ItalicClose if markup_kind == MarkupKind::Italic => {
-                    sink.eat(t);
+                    self.peeked = Some(Peeked::Token(t));
+                    break;
+                }
+                MarkupClose if markup_kind == MarkupKind::Markup => {
+                    self.peeked = Some(Peeked::Token(t));
                     break;
                 }
 
@@ -91,6 +106,8 @@ impl<'s> InlineParser<'s> {
                         sink.eat(t);
                         self.parse_inline(MarkupKind::Bold, sink);
                         self.expect(sink, BoldClose);
+                        // TODO: peek next to see if it's attribute opener
+                        // and then parse it as attributes
                     });
                 }
                 ItalicOpen => {
@@ -100,37 +117,36 @@ impl<'s> InlineParser<'s> {
                         self.expect(sink, ItalicClose);
                     });
                 }
-                DestinationOpen => {
-                    sink.wrap(Destination, |sink| {
-                        sink.eat(t);
-                        let mut tmp_s = self.s.clone();
-                        // TODO: skip whitespaces while lookahead for paragraph break
-                        if let Ok(peek) = lex_smart_destination(&mut tmp_s, true) {
-                            match peek.kind {
-                                DestScopeDelimiter => {
-                                    self.s = tmp_s;
-                                    sink.eat_as(peek, DestApplinkPrefix);
-                                    self.parse_dest_scope(sink)
-                                }
-                                DestScopeHeadingPrefix | DestScopeWikiHeadingPrefix => {
-                                    self.parse_dest_scope(sink)
-                                }
-                                _ => {
-                                    sink.wrap(DestRawlink, |sink| self.parse_dest_raw(sink))
-                                }
-                            };
+                MarkupOpen => {
+                    sink.wrap(Anchor, |sink| {
+                        self.parse_markup(sink, t);
+                        if let Some(next) = self.lex_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
+                            if next.kind == DestinationOpen {
+                                self.parse_destination(sink, next);
+                            } else {
+                                self.peeked = Some(Peeked::Token(next));
+                            }
                         }
-                        self.expect(sink, DestinationClose);
+                    })
+                }
+                DestinationOpen => {
+                    sink.wrap(Link, |sink| {
+                        self.parse_destination(sink, t);
                     });
                 }
                 k => unreachable!("unexpected token kind: {k:?}")
             }
         }
     }
-    fn expect(&mut self, sink: &mut InlineNodeSink, kind: SyntaxKind) {
+    /// expects given kind of node from cached token
+    /// returns true if cached token matches
+    fn expect(&mut self, sink: &mut InlineNodeSink, kind: SyntaxKind) -> bool {
         let peeked = self.peeked.take();
         match peeked {
-            Some(Peeked::Token(peeked)) if peeked.kind == kind => sink.eat(peeked),
+            Some(Peeked::Token(peeked)) if peeked.kind == kind => {
+                sink.eat(peeked);
+                true
+            },
             _ => {
                 self.peeked = peeked;
                 // FIXME: this isn't an ideal solution to get error node position
@@ -142,8 +158,41 @@ impl<'s> InlineParser<'s> {
                     Range::point(point),
                     &format!("missing expected token {kind:?}"),
                 ));
+                false
             }
         }
+    }
+    fn parse_markup(&mut self, sink: &mut InlineNodeSink, opener: SToken) {
+        use SyntaxKind::*;
+        sink.wrap(Markup, |sink| {
+            sink.eat(opener);
+            self.parse_inline(MarkupKind::Markup, sink);
+            self.expect(sink, MarkupClose);
+        });
+    }
+    fn parse_destination(&mut self, sink: &mut InlineNodeSink, opener: SToken) {
+        use SyntaxKind::*;
+        sink.wrap(Destination, |sink| {
+            sink.eat(opener);
+            let mut tmp_s = self.s.clone();
+            // TODO: skip whitespaces while lookahead for paragraph break
+            if let Ok(peek) = lex_smart_destination(&mut tmp_s, true) {
+                match peek.kind {
+                    DestScopeDelimiter => {
+                        self.s = tmp_s;
+                        sink.eat_as(peek, DestApplinkPrefix);
+                        self.parse_dest_scope(sink)
+                    }
+                    DestScopeHeadingPrefix | DestScopeWikiHeadingPrefix => {
+                        self.parse_dest_scope(sink)
+                    }
+                    _ => {
+                        sink.wrap(DestRawlink, |sink| self.parse_dest_raw(sink))
+                    }
+                };
+            }
+            self.expect(sink, DestinationClose);
+        });
     }
     fn parse_dest_raw(&mut self, sink: &mut InlineNodeSink) {
         use SyntaxKind::*;
@@ -333,6 +382,26 @@ mod test {
         assert_eq!(pb, Some(ParagraphBreak(token!(HeadingPrefix, 7..8))));
 
         let text = concat!(
+            "[word\n",
+            "* heading\n",
+        );
+        let (ast, pb) = parse_paragraph(text);
+        assert_eq!(
+            ast,
+            vec![
+                inner!(Anchor, [
+                    inner!(Markup, [
+                        leaf!(MarkupOpen, 0..1),
+                        leaf!(Word, 1..5),
+                        leaf!(SoftBreak, 5..6),
+                        error!(6..6, "missing expected token MarkupClose"),
+                    ]),
+                ]),
+            ],
+        );
+        assert_eq!(pb, Some(ParagraphBreak(token!(HeadingPrefix, 6..7))));
+
+        let text = concat!(
             "{https\n",
             "* heading\n",
         );
@@ -340,13 +409,15 @@ mod test {
         assert_eq!(
             ast,
             vec![
-                inner!(Destination, [
-                    leaf!(DestinationOpen, 0..1),
-                    inner!(DestRawlink, [
-                        leaf!(Word, 1..6),
-                        leaf!(SoftBreak, 6..7),
+                inner!(Link, [
+                    inner!(Destination, [
+                        leaf!(DestinationOpen, 0..1),
+                        inner!(DestRawlink, [
+                            leaf!(Word, 1..6),
+                            leaf!(SoftBreak, 6..7),
+                        ]),
+                        error!(7..7, "missing expected token DestinationClose"),
                     ]),
-                    error!(7..7, "missing expected token DestinationClose"),
                 ]),
             ],
         );

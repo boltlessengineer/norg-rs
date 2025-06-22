@@ -209,9 +209,7 @@ pub enum SyntaxKind {
     // {asdf}[asdf]
     Link,
     // [asdf]{asdf}
-    AnchorDefinition,
-    // [asdf]
-    AnchorReference,
+    Anchor,
 
     /// `[this]`
     Markup,
