@@ -19,7 +19,7 @@ fn main() {
     // };
     // println!("input:\n{text}");
     // dbg!(inline_ast);
-    let text = r#"[word]{word
+    let text = r#"*bold*(word word\;word)
 * heading"#;
     // let text = r#"{:word"#;
     let ast = {

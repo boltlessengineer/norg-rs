@@ -201,10 +201,14 @@ pub enum SyntaxKind {
     InlineTag,
     InlineTagPrefix,
 
+    Attributes,
     /// `(`
-    AttributeOpen,
+    AttributesOpen,
     /// `)`
-    AttributeClose,
+    AttributesClose,
+    /// `;`
+    AttributeDelimiter,
+    Attribute,
 
     // {asdf}[asdf]
     Link,

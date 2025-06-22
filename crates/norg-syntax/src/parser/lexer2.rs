@@ -125,7 +125,7 @@ pub fn lex_markup(s: &mut Scanner, current: MarkupKind, last_kind: SyntaxKind) -
         Special(']') if current == MarkupKind::Markup => base.as_kind(MarkupClose),
         // TODO(boltless): do I need to parse this from lexer?
         // it's faster to peek from parser side
-        Special('(') if last_kind == BoldClose => base.as_kind(AttributeOpen),
+        Special('(') if last_kind == BoldClose => base.as_kind(AttributesOpen),
         Special(ch) if can_open(s, ch, last_kind) => {
             let kind = attached_mod_from_char(ch).unwrap();
             base.as_kind(kind.to_open())
@@ -246,12 +246,32 @@ pub fn lex_smart_destination(s: &mut Scanner, start: bool) -> Result<SToken, Par
     })
 }
 
-/// - identifier
+/// - identifier (if start)
 /// - base tokens (end, word, whitespace, escaped, etc)
 /// - attribute_delimiter
 /// - attribute_end
 pub fn lex_attributes(s: &mut Scanner, start: bool) -> Result<SToken, ParagraphBreak> {
-    todo!()
+    use SyntaxKind::*;
+    if s.scout(-1).is_none_or(is_newline) {
+        if let Some(pb) = lex_non_para_prefix(s) {
+            return Err(ParagraphBreak(pb));
+        }
+    }
+    if start {
+        s.eat_while(is_whitespace);
+    }
+    let base = lex_base(s);
+    Ok(match base.kind {
+        Special(';') => base.as_kind(AttributeDelimiter),
+        Special(')') => base.as_kind(AttributesClose),
+        Word | Special('_' | '-') if start => {
+            s.eat_while(|ch| is_whitespace(ch) || ch == '-' || ch == '_');
+            let range = Range::new(base.range.start, s.cursor());
+            s.eat_while(is_whitespace);
+            SToken { kind: Identifier, range }
+        }
+        _ => base
+    })
 }
 
 /// - Indent

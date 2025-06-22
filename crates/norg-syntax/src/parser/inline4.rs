@@ -4,7 +4,7 @@ use crate::{node::{SyntaxKind, SyntaxNode}, Range};
 
 use super::lexer2::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Peeked {
     Token(SToken),
     ParagraphBreak(SToken),
@@ -105,41 +105,78 @@ impl<'s> InlineParser<'s> {
                     sink.wrap(Bold, |sink| {
                         sink.eat(t);
                         self.parse_inline(MarkupKind::Bold, sink);
-                        self.expect(sink, BoldClose);
-                        // TODO: peek next to see if it's attribute opener
-                        // and then parse it as attributes
+                        if !self.expect(sink, BoldClose) {
+                            return
+                        }
+                        if let Some(next) = self.peek_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
+                            if next.kind == AttributesOpen {
+                                self.parse_attributes(sink);
+                            }
+                        }
                     });
                 }
                 ItalicOpen => {
                     sink.wrap(Italic, |sink| {
                         sink.eat(t);
                         self.parse_inline(MarkupKind::Italic, sink);
-                        self.expect(sink, ItalicClose);
+                        if !self.expect(sink, ItalicClose) {
+                            return
+                        }
+                        if let Some(next) = self.peek_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
+                            if next.kind == AttributesOpen {
+                                self.parse_attributes(sink);
+                            }
+                        }
                     });
                 }
                 MarkupOpen => {
+                    self.peeked = Some(Peeked::Token(t));
                     sink.wrap(Anchor, |sink| {
-                        self.parse_markup(sink, t);
-                        if let Some(next) = self.lex_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
+                        self.parse_markup(sink);
+                        if let Some(next) = self.peek_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
                             if next.kind == DestinationOpen {
-                                self.parse_destination(sink, next);
-                            } else {
-                                self.peeked = Some(Peeked::Token(next));
+                                self.parse_destination(sink);
+                            }
+                        }
+                        if let Some(next) = self.peek_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
+                            if next.kind == AttributesOpen {
+                                self.parse_attributes(sink);
                             }
                         }
                     })
                 }
                 DestinationOpen => {
+                    // HACK: seems like I should just peek every new node instead
+                    self.peeked = Some(Peeked::Token(t));
                     sink.wrap(Link, |sink| {
-                        self.parse_destination(sink, t);
+                        self.parse_destination(sink);
+                        if let Some(next) = self.peek_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
+                            if next.kind == MarkupOpen {
+                                self.parse_markup(sink);
+                            }
+                        }
+                        if let Some(next) = self.peek_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
+                            if next.kind == AttributesOpen {
+                                self.parse_attributes(sink);
+                            }
+                        }
                     });
                 }
                 k => unreachable!("unexpected token kind: {k:?}")
             }
         }
     }
+    fn assert(&mut self, sink: &mut InlineNodeSink, kind: SyntaxKind) {
+        let peeked = self.peeked.take();
+        match peeked {
+            Some(Peeked::Token(peeked)) if peeked.kind == kind => {
+                sink.eat(peeked);
+            }
+            _ => panic!("expected {kind:?}, got {:?}", peeked),
+        }
+    }
     /// expects given kind of node from cached token
-    /// returns true if cached token matches
+    /// returns true if cached token matches expected kind
     fn expect(&mut self, sink: &mut InlineNodeSink, kind: SyntaxKind) -> bool {
         let peeked = self.peeked.take();
         match peeked {
@@ -162,18 +199,53 @@ impl<'s> InlineParser<'s> {
             }
         }
     }
-    fn parse_markup(&mut self, sink: &mut InlineNodeSink, opener: SToken) {
+    // TODO: don't pass opener. just have `current` token in the parser
+    fn parse_attributes(&mut self, sink: &mut InlineNodeSink) {
+        use SyntaxKind::*;
+        sink.wrap(Attributes, |sink| {
+            self.assert(sink, AttributesOpen);
+            self.parse_attrs(sink, true);
+            self.expect(sink, AttributesClose);
+        });
+    }
+    /// parse nodes in context of attributes
+    fn parse_attrs(&mut self, sink: &mut InlineNodeSink, single_line: bool) {
+        use SyntaxKind::*;
+        while let Some(t) = self.lex_inline(|s| lex_attributes(s, true)) {
+            match t.kind {
+                End => break,
+
+                // close token
+                AttributesClose => {
+                    self.peeked = Some(Peeked::Token(t));
+                    break
+                }
+
+                // attributes tokens
+                AttributeDelimiter => sink.eat(t),
+                Identifier => {
+                    sink.wrap(Attribute, |sink| {
+                        sink.eat(t);
+                        self.eat_attrs_text(sink);
+                    })
+                }
+
+                _ => todo!()
+            }
+        }
+    }
+    fn parse_markup(&mut self, sink: &mut InlineNodeSink) {
         use SyntaxKind::*;
         sink.wrap(Markup, |sink| {
-            sink.eat(opener);
+            self.assert(sink, MarkupOpen);
             self.parse_inline(MarkupKind::Markup, sink);
             self.expect(sink, MarkupClose);
         });
     }
-    fn parse_destination(&mut self, sink: &mut InlineNodeSink, opener: SToken) {
+    fn parse_destination(&mut self, sink: &mut InlineNodeSink) {
         use SyntaxKind::*;
         sink.wrap(Destination, |sink| {
-            sink.eat(opener);
+            self.assert(sink, DestinationOpen);
             let mut tmp_s = self.s.clone();
             // TODO: skip whitespaces while lookahead for paragraph break
             if let Ok(peek) = lex_smart_destination(&mut tmp_s, true) {
@@ -207,13 +279,27 @@ impl<'s> InlineParser<'s> {
             }
         }
     }
-    fn parse_scope_text(&mut self, sink: &mut InlineNodeSink) {
+    // TODO: generalize as eat_until([...])
+    fn eat_scope_texts(&mut self, sink: &mut InlineNodeSink) {
         use SyntaxKind::*;
         // eat until End | DestinationClose | ScopeDelimiter
         while let Some(t) = self.lex_inline(|s| lex_smart_destination(s, false)) {
             match t.kind {
                 End => break,
                 DestinationClose | DestScopeDelimiter => {
+                    self.peeked = Some(Peeked::Token(t));
+                    break
+                },
+                _ => sink.eat(t),
+            }
+        }
+    }
+    fn eat_attrs_text(&mut self, sink: &mut InlineNodeSink) {
+        use SyntaxKind::*;
+        while let Some(t) = self.lex_inline(|s| lex_attributes(s, false)) {
+            match t.kind {
+                End => break,
+                AttributesClose | AttributeDelimiter => {
                     self.peeked = Some(Peeked::Token(t));
                     break
                 },
@@ -240,19 +326,19 @@ impl<'s> InlineParser<'s> {
                 DestScopeHeadingPrefix => {
                     sink.wrap(DestScopeHeading, |sink| {
                         sink.eat(t);
-                        self.parse_scope_text(sink)
+                        self.eat_scope_texts(sink)
                     });
                 }
                 DestScopeWikiHeadingPrefix => {
                     sink.wrap(DestScopeWikiHeading, |sink| {
                         sink.eat(t);
-                        self.parse_scope_text(sink)
+                        self.eat_scope_texts(sink)
                     });
                 }
                 _ => {
                     sink.wrap(DestApplinkPath, |sink| {
                         sink.eat(t);
-                        self.parse_scope_text(sink)
+                        self.eat_scope_texts(sink)
                     });
                 }
             }
