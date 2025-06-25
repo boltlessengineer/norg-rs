@@ -23,13 +23,28 @@ pub struct InlineParser<'s> {
     s: Scanner<'s>,
     // TODO: `peeked` is missleading. rename this to `leftover`
     // TODO: No, this is basically a `current` token. refactor it to be a current token
-    peeked: Option<Peeked>,
+    cached: Option<Peeked>,
 }
 impl<'s> InlineParser<'s> {
     pub fn new(text: &'s str) -> Self {
         Self {
             s: Scanner::new(text),
-            peeked: None,
+            cached: None,
+        }
+    }
+    // FIXME: how to *consume* current token without the knowledge of current lexer mode?
+    fn current(&self) -> &SToken {
+        // TODO: remove Option<_> wrapper for `peeked`
+        let Some(ref current) = self.cached else {
+            todo!("lex with current lexer and update self.cached");
+        };
+        current.token()
+    }
+    fn at_paragraph_break(&self) -> bool {
+        let Some(ref current) = self.cached else { todo!(); };
+        match current {
+            Peeked::ParagraphBreak(_) => true,
+            Peeked::Token(_) => false,
         }
     }
     /// lex with given inline lexer
@@ -39,17 +54,17 @@ impl<'s> InlineParser<'s> {
         lexer: impl FnOnce(&mut Scanner) -> Result<SToken, ParagraphBreak>,
     ) -> Option<SToken> {
         // TODO: maybe just move paragraph break lexer to here
-        let peeked = self.peeked.take();
+        let peeked = self.cached.take();
         match peeked {
             Some(Peeked::Token(t)) => Some(t),
             Some(Peeked::ParagraphBreak(_)) => {
-                self.peeked = peeked;
+                self.cached = peeked;
                 None
             },
             None => match lexer(&mut self.s) {
                 Ok(t) => Some(t),
                 Err(pb) => {
-                    self.peeked = Some(Peeked::ParagraphBreak(pb.0));
+                    self.cached = Some(Peeked::ParagraphBreak(pb.0));
                     None
                 }
             }
@@ -62,8 +77,8 @@ impl<'s> InlineParser<'s> {
         let t = self.lex_inline(lexer);
         match t {
             Some(t) => {
-                self.peeked = Some(Peeked::Token(t));
-                self.peeked.as_ref().map(|p| p.token())
+                self.cached = Some(Peeked::Token(t));
+                self.cached.as_ref().map(|p| p.token())
             }
             None => None
         }
@@ -71,7 +86,7 @@ impl<'s> InlineParser<'s> {
     pub fn parse_paragraph(&mut self) -> (Vec<SyntaxNode>, Option<ParagraphBreak>) {
         let mut sink = InlineNodeSink::new();
         self.parse_inline(MarkupKind::Base, &mut sink);
-        let pb = match &self.peeked {
+        let pb = match &self.cached {
             Some(Peeked::ParagraphBreak(pb)) => Some(ParagraphBreak(pb.clone())),
             _ => None,
         };
@@ -89,15 +104,15 @@ impl<'s> InlineParser<'s> {
                 // close tokens
                 // cache lexed token and break the loop
                 BoldClose if markup_kind == MarkupKind::Bold => {
-                    self.peeked = Some(Peeked::Token(t));
+                    self.cached = Some(Peeked::Token(t));
                     break;
                 }
                 ItalicClose if markup_kind == MarkupKind::Italic => {
-                    self.peeked = Some(Peeked::Token(t));
+                    self.cached = Some(Peeked::Token(t));
                     break;
                 }
                 MarkupClose if markup_kind == MarkupKind::Markup => {
-                    self.peeked = Some(Peeked::Token(t));
+                    self.cached = Some(Peeked::Token(t));
                     break;
                 }
 
@@ -130,7 +145,7 @@ impl<'s> InlineParser<'s> {
                     });
                 }
                 MarkupOpen => {
-                    self.peeked = Some(Peeked::Token(t));
+                    self.cached = Some(Peeked::Token(t));
                     sink.wrap(Anchor, |sink| {
                         self.parse_markup(sink);
                         if let Some(next) = self.peek_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
@@ -147,7 +162,7 @@ impl<'s> InlineParser<'s> {
                 }
                 DestinationOpen => {
                     // HACK: seems like I should just peek every new node instead
-                    self.peeked = Some(Peeked::Token(t));
+                    self.cached = Some(Peeked::Token(t));
                     sink.wrap(Link, |sink| {
                         self.parse_destination(sink);
                         if let Some(next) = self.peek_inline(|s| lex_markup(s, markup_kind, sink.last_kind)) {
@@ -167,7 +182,7 @@ impl<'s> InlineParser<'s> {
         }
     }
     fn assert(&mut self, sink: &mut InlineNodeSink, kind: SyntaxKind) {
-        let peeked = self.peeked.take();
+        let peeked = self.cached.take();
         match peeked {
             Some(Peeked::Token(peeked)) if peeked.kind == kind => {
                 sink.eat(peeked);
@@ -178,19 +193,19 @@ impl<'s> InlineParser<'s> {
     /// expects given kind of node from cached token
     /// returns true if cached token matches expected kind
     fn expect(&mut self, sink: &mut InlineNodeSink, kind: SyntaxKind) -> bool {
-        let peeked = self.peeked.take();
+        let peeked = self.cached.take();
         match peeked {
             Some(Peeked::Token(peeked)) if peeked.kind == kind => {
                 sink.eat(peeked);
                 true
             },
             _ => {
-                self.peeked = peeked;
+                self.cached = peeked;
                 // FIXME: this isn't an ideal solution to get error node position
                 // should have two scanner state (one for current, one for peeked)
                 // and switch them when peeked token is consumed
                 // or just remove range property from error node (detached range?)
-                let point = self.peeked.as_ref().map(|p| p.token().range.start).unwrap_or(self.s.cursor());
+                let point = self.cached.as_ref().map(|p| p.token().range.start).unwrap_or(self.s.cursor());
                 sink.nodes.push(SyntaxNode::error(
                     Range::point(point),
                     &format!("missing expected token {kind:?}"),
@@ -217,7 +232,7 @@ impl<'s> InlineParser<'s> {
 
                 // close token
                 AttributesClose => {
-                    self.peeked = Some(Peeked::Token(t));
+                    self.cached = Some(Peeked::Token(t));
                     break
                 }
 
@@ -272,7 +287,7 @@ impl<'s> InlineParser<'s> {
             match t.kind {
                 End => break,
                 DestinationClose => {
-                    self.peeked = Some(Peeked::Token(t));
+                    self.cached = Some(Peeked::Token(t));
                     break
                 }
                 _ => sink.eat(t),
@@ -287,7 +302,7 @@ impl<'s> InlineParser<'s> {
             match t.kind {
                 End => break,
                 DestinationClose | DestScopeDelimiter => {
-                    self.peeked = Some(Peeked::Token(t));
+                    self.cached = Some(Peeked::Token(t));
                     break
                 },
                 _ => sink.eat(t),
@@ -300,7 +315,7 @@ impl<'s> InlineParser<'s> {
             match t.kind {
                 End => break,
                 AttributesClose | AttributeDelimiter => {
-                    self.peeked = Some(Peeked::Token(t));
+                    self.cached = Some(Peeked::Token(t));
                     break
                 },
                 _ => sink.eat(t),
@@ -317,7 +332,7 @@ impl<'s> InlineParser<'s> {
                 // close token
                 DestinationClose => {
                     // pass closing modifier to upper parser and exit the loop
-                    self.peeked = Some(Peeked::Token(t));
+                    self.cached = Some(Peeked::Token(t));
                     break
                 },
 
